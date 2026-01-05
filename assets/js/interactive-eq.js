@@ -398,15 +398,16 @@ const InteractiveEQ = (function() {
             .style("touch-action", "none").call(bindHandleEvents);
 
         // Whisker line behind ring
-        enter.append("line").attr("class", "whisker").attr("stroke-width", 1.5).attr("opacity", 0);
+        enter.append("line").attr("class", "whisker").attr("stroke-width", 1.5).attr("opacity", 0)
+            .style("pointer-events", "none");
         // Ring circles
         enter.append("circle").attr("class", "outer");
         enter.append("circle").attr("class", "inner").attr("r", 10);
         // Whisker end balls on top of ring
         enter.append("circle").attr("class", "whisker-left").attr("r", 4).attr("opacity", 0)
-            .style("cursor", "ew-resize").style("touch-action", "none").style("pointer-events", "all");
+            .style("cursor", "ew-resize").style("touch-action", "none").style("pointer-events", "none");
         enter.append("circle").attr("class", "whisker-right").attr("r", 4).attr("opacity", 0)
-            .style("cursor", "ew-resize").style("touch-action", "none").style("pointer-events", "all");
+            .style("cursor", "ew-resize").style("touch-action", "none").style("pointer-events", "none");
         // Label on top
         enter.append("text").attr("class", "type-label")
             .attr("text-anchor", "middle").attr("dominant-baseline", "central")
@@ -414,7 +415,7 @@ const InteractiveEQ = (function() {
         // Delete X button
         let deleteBtn = enter.append("g").attr("class", "delete-btn").attr("opacity", 0)
             .attr("transform", "translate(0, 19)")
-            .style("cursor", "pointer").style("pointer-events", "all");
+            .style("cursor", "pointer").style("pointer-events", "none");
         deleteBtn.append("circle").attr("r", 7).attr("fill", "var(--background-color, #222)")
             .attr("class", "delete-border").attr("stroke-width", 1.5);
         deleteBtn.append("line").attr("x1", -3).attr("y1", -3).attr("x2", 3).attr("y2", 3)
@@ -434,7 +435,8 @@ const InteractiveEQ = (function() {
                 if (hoveredHandle === null || hoveredHandle.node() !== key) {
                     handle.classed("whisker-selected", false);
                     handle.selectAll(".whisker, .whisker-left, .whisker-right, .delete-btn")
-                        .transition().duration(300).attr("opacity", 0);
+                        .transition().duration(300).attr("opacity", 0)
+                        .on("end", function() { d3.select(this).style("pointer-events", "none"); });
                 }
                 whiskerFadeTimers.delete(key);
             }, 2000));
@@ -479,13 +481,15 @@ const InteractiveEQ = (function() {
                 if (wasSelected) {
                     h.classed("whisker-selected", false);
                     h.selectAll(".whisker, .whisker-left, .whisker-right, .delete-btn")
-                        .transition().duration(300).attr("opacity", 0);
+                        .transition().duration(300).attr("opacity", 0)
+                        .on("end", function() { d3.select(this).style("pointer-events", "none"); });
                     cancelWhiskerFadeTimer(h);
                 } else {
                     h.classed("whisker-selected", true);
-                    h.selectAll(".whisker, .whisker-left, .whisker-right").attr("opacity", 0.8);
-                    h.select(".delete-btn").attr("opacity", 1);
-                    cancelWhiskerFadeTimer(h);
+                    h.selectAll(".whisker, .whisker-left, .whisker-right").attr("opacity", 0.8)
+                        .style("pointer-events", "all");
+                    h.select(".delete-btn").attr("opacity", 1).style("pointer-events", "all");
+                    startWhiskerFadeTimer(h);
                 }
             }, 250);
         }).on("dblclick.whisker", function() {
@@ -542,7 +546,8 @@ const InteractiveEQ = (function() {
                 mobileWhiskerTimeout = null;
                 handle.classed("whisker-selected", false);
                 handle.selectAll(".whisker, .whisker-left, .whisker-right, .delete-btn")
-                    .transition().duration(300).attr("opacity", 0);
+                    .transition().duration(300).attr("opacity", 0)
+                    .on("end", function() { d3.select(this).style("pointer-events", "none"); });
             }, 3000);
         }
 
@@ -567,11 +572,13 @@ const InteractiveEQ = (function() {
                 let h = d3.select(element);
                 let wasSelected = h.classed("whisker-selected");
                 eqHandlesGroup.selectAll(".eq-handle").classed("whisker-selected", false)
-                    .selectAll(".whisker, .whisker-left, .whisker-right, .delete-btn").attr("opacity", 0);
+                    .selectAll(".whisker, .whisker-left, .whisker-right, .delete-btn")
+                    .attr("opacity", 0).style("pointer-events", "none");
                 if (!wasSelected) {
                     h.classed("whisker-selected", true);
-                    h.selectAll(".whisker, .whisker-left, .whisker-right").attr("opacity", 0.8);
-                    h.select(".delete-btn").attr("opacity", 1);
+                    h.selectAll(".whisker, .whisker-left, .whisker-right").attr("opacity", 0.8)
+                        .style("pointer-events", "all");
+                    h.select(".delete-btn").attr("opacity", 1).style("pointer-events", "all");
                     startMobileWhiskerTimeout(h);
                 }
             }, 500);
