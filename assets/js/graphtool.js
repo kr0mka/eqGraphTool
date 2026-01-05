@@ -73,7 +73,7 @@ doc.html(`
 
         <div class="smooth">
           <span>Smooth:</span>
-          <input type="number" inputmode="decimal" id="smooth-level" required min="0" value="5" step="any" onclick="this.focus();this.select()"></input>
+          <input type="number" inputmode="decimal" id="smooth-level" required min="0" value="1" step="any" onclick="this.focus();this.select()"></input>
         </div>
 
         <div class="miscTools">
@@ -926,7 +926,7 @@ function smooth_eval(p, y) {
     return u;
 }
 
-let smooth_level = 5,
+let smooth_level = 1,
     smooth_scale = 0.01*(typeof scale_smoothing !== "undefined" ? scale_smoothing : 1),
     smooth_param = undefined;
 function smooth(y, c) {
