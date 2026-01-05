@@ -25,6 +25,7 @@ const InteractiveEQ = (function() {
     let justDeletedFilter = false;
     let hoveredHandle = null;
     let hoveredHandleData = null;
+    let qManuallyModified = new Set();  // Track filters with manually changed Q
 
     // Injected dependencies
     let scales = null;      // { x, y }
@@ -290,8 +291,21 @@ const InteractiveEQ = (function() {
             let idx = d.filterIndex;
             filterInputs = callbacks.getFilterInputs();
             const types = ["PK", "LSQ", "HSQ"];
-            let cur = types.indexOf(filterInputs.type[idx].value);
-            filterInputs.type[idx].value = types[(cur + 1) % 3];
+            let curType = filterInputs.type[idx].value;
+            let curQ = parseFloat(filterInputs.q[idx].value) || 1;
+            let cur = types.indexOf(curType);
+            let newType = types[(cur + 1) % 3];
+            filterInputs.type[idx].value = newType;
+
+            // Auto-adjust Q when switching between PK and shelf filters (only if Q was never manually changed)
+            if (!qManuallyModified.has(idx)) {
+                if (curType === "PK" && (newType === "LSQ" || newType === "HSQ") && curQ === 1.0) {
+                    filterInputs.q[idx].value = 0.71;
+                } else if ((curType === "LSQ" || curType === "HSQ") && newType === "PK" && curQ === 0.71) {
+                    filterInputs.q[idx].value = 1.0;
+                }
+            }
+
             callbacks.applyEQ();
         }
 
@@ -341,6 +355,7 @@ const InteractiveEQ = (function() {
             q += d3.event.deltaY < 0 ? step : -step;
             q = Math.max(0.1, Math.min(10, Math.round(q * precision) / precision));
             filterInputs.q[idx].value = q;
+            qManuallyModified.add(idx);
             callbacks.applyEQ();
         })
         .on("click", function() {
@@ -490,6 +505,12 @@ const InteractiveEQ = (function() {
             callbacks.setFilters(filters);
             callbacks.applyEQ();
             callbacks.updatePreampDisplay();
+
+            // Update qManuallyModified set: remove idx and shift higher indices down
+            qManuallyModified.delete(idx);
+            let newSet = new Set();
+            qManuallyModified.forEach(i => newSet.add(i > idx ? i - 1 : i));
+            qManuallyModified = newSet;
         }
 
         enter.select(".delete-btn").on("touchstart", function() {
@@ -613,6 +634,7 @@ const InteractiveEQ = (function() {
                     let idx = d.filterIndex;
                     let filterInputs = callbacks.getFilterInputs();
                     filterInputs.q[idx].value = newQ;
+                    qManuallyModified.add(idx);
 
                     d.q = newQ;
                     let newBwOctaves = 2 * Math.asinh(1 / (2 * newQ)) / Math.LN2;
@@ -756,6 +778,7 @@ const InteractiveEQ = (function() {
         filterInputs.freq[idx].value = freq;
         filterInputs.gain[idx].value = gain;
         filterInputs.q[idx].value = 1.0;
+        qManuallyModified.delete(idx);  // Reset Q modification tracking for new filter
         callbacks.applyEQ();
         updateEQHandles();
     }
