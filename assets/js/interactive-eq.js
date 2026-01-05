@@ -329,8 +329,15 @@ const InteractiveEQ = (function() {
             let idx = d.filterIndex;
             filterInputs = callbacks.getFilterInputs();
             let q = parseFloat(filterInputs.q[idx].value) || 1;
-            let step = d3.event.shiftKey ? 0.01 : 0.1;
-            let precision = d3.event.shiftKey ? 100 : 10;
+            let step, precision;
+            if (d3.event.shiftKey) {
+                step = 0.01;
+                precision = 100;
+            } else {
+                // Logarithmic step based on current Q
+                step = q <= 2 ? 0.1 : q <= 4 ? 0.2 : 0.4;
+                precision = q <= 2 ? 10 : 5;
+            }
             q += d3.event.deltaY < 0 ? step : -step;
             q = Math.max(0.1, Math.min(10, Math.round(q * precision) / precision));
             filterInputs.q[idx].value = q;
