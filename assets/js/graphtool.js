@@ -4042,6 +4042,113 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
             tmStatus.style.color = color;
         }
 
+        // Organize all filters for TotalMix (Room EQ + PEQ)
+        // LSQ: REQ band 1 or PEQ band 1 (max 2 total)
+        // HSQ: REQ bands 8,9 or PEQ band 3 (max 3 total)
+        // PK: any remaining slot
+        function organizeAllFilters(filters) {
+            let lsqFilters = filters.filter(f => f.type === "LSQ");
+            let hsqFilters = filters.filter(f => f.type === "HSQ");
+            let pkFilters = filters.filter(f => f.type === "PK");
+
+            // Validate shelving counts
+            if (lsqFilters.length > 2) {
+                return { error: `Too many Low Shelf filters: ${lsqFilters.length} (max 2: REQ band 1 + PEQ band 1)` };
+            }
+            if (hsqFilters.length > 3) {
+                return { error: `Too many High Shelf filters: ${hsqFilters.length} (max 3: REQ bands 8,9 + PEQ band 3)` };
+            }
+
+            // Room EQ: 9 bands, shelving only in positions 0 (LSQ), 7, 8 (HSQ)
+            let roomEQ = new Array(9).fill(null);
+            // PEQ: 3 bands, shelving only in positions 0 (LSQ), 2 (HSQ)
+            let peq = new Array(3).fill(null);
+
+            // Place LSQ filters (band 1 of REQ, then band 1 of PEQ)
+            let lsqIndex = 0;
+            if (lsqIndex < lsqFilters.length) {
+                roomEQ[0] = {...lsqFilters[lsqIndex++]};
+            }
+            if (lsqIndex < lsqFilters.length) {
+                peq[0] = {...lsqFilters[lsqIndex++]};
+            }
+
+            // Place HSQ filters (bands 8,9 of REQ, then band 3 of PEQ)
+            let hsqIndex = 0;
+            if (hsqIndex < hsqFilters.length) {
+                roomEQ[7] = {...hsqFilters[hsqIndex++]};
+            }
+            if (hsqIndex < hsqFilters.length) {
+                roomEQ[8] = {...hsqFilters[hsqIndex++]};
+            }
+            if (hsqIndex < hsqFilters.length) {
+                peq[2] = {...hsqFilters[hsqIndex++]};
+            }
+
+            // Fill remaining slots with peaking filters
+            let pkIndex = 0;
+            // Fill Room EQ first
+            for (let i = 0; i < 9 && pkIndex < pkFilters.length; i++) {
+                if (!roomEQ[i]) {
+                    roomEQ[i] = {...pkFilters[pkIndex++]};
+                }
+            }
+            // Then fill PEQ
+            for (let i = 0; i < 3 && pkIndex < pkFilters.length; i++) {
+                if (!peq[i]) {
+                    peq[i] = {...pkFilters[pkIndex++]};
+                }
+            }
+
+            // Check if we have leftover filters
+            const totalFilters = lsqFilters.length + hsqFilters.length + pkFilters.length;
+            if (totalFilters > 12) {
+                return { error: `Too many filters: ${totalFilters} (max 12: 9 REQ + 3 PEQ)` };
+            }
+
+            // Apply PEQ precision limits and track changes
+            let modifications = [];
+            peq.forEach((f, i) => {
+                if (!f) return;
+                const origFreq = f.freq;
+                const origQ = f.q;
+                const origGain = f.gain;
+
+                f.freq = Math.round(f.freq);
+                f.q = Math.round(f.q * 10) / 10;
+                f.gain = Math.round(f.gain * 2) / 2;
+
+                let changes = [];
+                if (origFreq !== f.freq) changes.push(`F:${origFreq}→${f.freq}`);
+                if (origQ !== f.q) changes.push(`Q:${origQ}→${f.q}`);
+                if (origGain !== f.gain) changes.push(`G:${origGain}→${f.gain}`);
+                if (changes.length) {
+                    modifications.push(`PEQ${i+1}: ${changes.join(', ')}`);
+                }
+            });
+
+            // Count actual filters before filling with placeholders
+            const roomEQCount = roomEQ.filter(f => f !== null).length;
+            const peqCount = peq.filter(f => f !== null).length;
+
+            // Fill empty slots with zero-gain placeholder filters to preserve positions
+            const emptyFilter = { type: 'PK', freq: 1000, gain: 0, q: 1.0 };
+            for (let i = 0; i < 9; i++) {
+                if (!roomEQ[i]) roomEQ[i] = {...emptyFilter};
+            }
+            for (let i = 0; i < 3; i++) {
+                if (!peq[i]) peq[i] = {...emptyFilter};
+            }
+
+            return {
+                roomEQ: roomEQ,
+                peq: peq,
+                roomEQCount: roomEQCount,
+                peqCount: peqCount,
+                modifications
+            };
+        }
+
         // Connect - fetch channel list
         tmConnect.addEventListener('click', async () => {
             setStatus('Connecting...', '#ff0');
@@ -4062,27 +4169,50 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
 
         // Send EQ to TotalMix
         tmSend.addEventListener('click', async () => {
-            const filters = elemToFilters(true).filter(f => f.freq > 0 && !f.disabled);
+            let filters = elemToFilters(true).filter(f => f.freq > 0 && !f.disabled);
             const channel = parseInt(tmChannel.value);
 
             if (!filters.length) {
                 alert('No active filters to send.');
                 return;
             }
-            if (filters.length > 12) {
-                alert('Max 12 filters supported (9 Room EQ + 3 PEQ). Only first 12 will be sent.');
-                filters.length = 12;
+
+            // Validate Q and gain ranges
+            for (let i = 0; i < filters.length; i++) {
+                const f = filters[i];
+                if (f.q < 0.4 || f.q > 9.9) {
+                    alert(`Filter ${i + 1} has Q value ${f.q} outside allowed range (0.4 - 9.9)`);
+                    return;
+                }
+                if (f.gain < -20 || f.gain > 20) {
+                    alert(`Filter ${i + 1} has gain value ${f.gain} outside allowed range (-20 to +20 dB)`);
+                    return;
+                }
             }
+
+            // Organize filters with smart redistribution
+            const result = organizeAllFilters(filters);
+            if (result.error) {
+                alert(`Error: ${result.error}`);
+                return;
+            }
+
+            // Combine organized filters for sending
+            const organizedFilters = [...result.roomEQ, ...result.peq];
 
             setStatus('Sending...', '#ff0');
             try {
                 const res = await fetch(`${BRIDGE_URL}/api/channel/${channel}/eq`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({filters})
+                    body: JSON.stringify({filters: organizedFilters})
                 });
-                const data = await res.json();
-                setStatus(`Sent: ${data.roomEQ} REQ + ${data.peq} PEQ bands`, '#0f0');
+                await res.json();
+                let statusMsg = `Sent: ${result.roomEQCount} REQ + ${result.peqCount} PEQ bands`;
+                if (result.modifications.length > 0) {
+                    statusMsg += ` | Rounded: ${result.modifications.join('; ')}`;
+                }
+                setStatus(statusMsg, '#0f0');
             } catch (e) {
                 setStatus('Send failed', '#f66');
             }
