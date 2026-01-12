@@ -50,7 +50,7 @@ const InteractiveEQ = (function() {
 
     function qToRadius(q) {
         let minR = 12, maxR = 28;
-        let logQ = Math.log10(Math.max(0.1, Math.min(10, q || 1)));
+        let logQ = Math.log10(Math.max(0.1, Math.min(9.9, q || 1)));
         let ratio = (logQ + 1) / 2;
         return maxR - ratio * (maxR - minR);
     }
@@ -353,7 +353,7 @@ const InteractiveEQ = (function() {
                 precision = q <= 2 ? 10 : 5;
             }
             q += d3.event.deltaY < 0 ? step : -step;
-            q = Math.max(0.1, Math.min(10, Math.round(q * precision) / precision));
+            q = Math.max(0.1, Math.min(9.9, Math.round(q * precision) / precision));
             filterInputs.q[idx].value = q;
             qManuallyModified.add(idx);
             callbacks.applyEQ();
@@ -636,7 +636,7 @@ const InteractiveEQ = (function() {
                     if (bwOctaves <= 0) return;
 
                     let newQ = 1 / (2 * Math.sinh(bwOctaves * Math.LN2 / 2));
-                    newQ = Math.max(0.1, Math.min(10, Math.round(newQ * 100) / 100));
+                    newQ = Math.max(0.1, Math.min(9.9, Math.round(newQ * 100) / 100));
 
                     let idx = d.filterIndex;
                     let filterInputs = callbacks.getFilterInputs();

@@ -2626,17 +2626,19 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         updateDF(boost, tilt, halftilt, ear, treble, air, bassFreq, "air");
     });
 
-    // Mouse wheel adjustment for all preference inputs (0.1dB per scroll)
+    // Shift + scroll adjustment for preference inputs (works over whole tile)
     const wheelInputs = ['#cusdf-tilt', '#cusdf-bass', '#cusdf-halftilt', '#cusdf-treb', '#cusdf-air', '#cusdf-ear'];
     wheelInputs.forEach(selector => {
-        const el = document.querySelector(selector);
-        if (el) {
-            el.addEventListener('wheel', function(e) {
+        const input = document.querySelector(selector);
+        if (input) {
+            const tile = input.parentElement; // The div containing input + label
+            tile.addEventListener('wheel', function(e) {
+                if (!e.shiftKey) return; // Require Shift key
                 e.preventDefault();
                 const delta = e.deltaY < 0 ? 0.1 : -0.1;
-                const newValue = Math.round((parseFloat(this.value || 0) + delta) * 10) / 10;
-                this.value = newValue;
-                this.dispatchEvent(new Event('input', { bubbles: true }));
+                const newValue = Math.round((parseFloat(input.value || 0) + delta) * 10) / 10;
+                input.value = newValue;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
             }, { passive: false });
         }
     });
