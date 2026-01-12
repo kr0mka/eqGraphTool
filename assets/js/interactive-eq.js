@@ -226,10 +226,12 @@ const InteractiveEQ = (function() {
                     let targetY = scales.y.invert(svgPt.y);
                     let phoneObj = getEQPhoneObj();
                     let curveY = samplePhoneCurveAt(phoneObj, newFreq);
+                    // Account for EQ variant offset difference
+                    let eqOffsetDiff = phoneObj && phoneObj.eq ? (phoneObj.eq.offset || 0) - (phoneObj.offset || 0) : 0;
 
                     let newGain;
                     if (curveY !== null) {
-                        newGain = targetY - curveY;
+                        newGain = targetY - curveY - eqOffsetDiff;
                     } else {
                         let yd = scales.y.domain();
                         let center = (yd[0] + yd[1]) / 2;
@@ -370,12 +372,14 @@ const InteractiveEQ = (function() {
     function transitionEQHandles(duration) {
         if (!enabled) return;
         let phoneObj = getEQPhoneObj();
+        // Get EQ variant offset difference from parent
+        let eqOffsetDiff = phoneObj && phoneObj.eq ? (phoneObj.eq.offset || 0) - (phoneObj.offset || 0) : 0;
         eqHandlesGroup.selectAll(".eq-handle")
             .transition().duration(duration).ease(d3.easeQuad)
             .attr("transform", d => {
                 let px = scales.x(Math.max(20, Math.min(20000, d.freq)));
                 let curveY = samplePhoneCurveAt(phoneObj, d.freq);
-                let py = curveY !== null ? scales.y(curveY + (d.gain || 0)) : scales.y(scales.y.domain().reduce((a,b)=>a+b)/2 + (d.gain||0));
+                let py = curveY !== null ? scales.y(curveY + (d.gain || 0) + eqOffsetDiff) : scales.y(scales.y.domain().reduce((a,b)=>a+b)/2 + (d.gain||0));
                 return `translate(${px},${py})`;
             });
     }
@@ -387,6 +391,8 @@ const InteractiveEQ = (function() {
         }
 
         let phoneObj = getEQPhoneObj();
+        // Get EQ variant offset difference from parent
+        let eqOffsetDiff = phoneObj && phoneObj.eq ? (phoneObj.eq.offset || 0) - (phoneObj.offset || 0) : 0;
         let filters = callbacks.getFilters()
             .map((f, i) => ({ ...f, filterIndex: i }))
             .filter(f => f.freq && f.freq > 0);
@@ -690,7 +696,7 @@ const InteractiveEQ = (function() {
         all.attr("transform", d => {
             let px = scales.x(Math.max(20, Math.min(20000, d.freq)));
             let curveY = samplePhoneCurveAt(phoneObj, d.freq);
-            let py = curveY !== null ? scales.y(curveY + (d.gain || 0)) : scales.y(scales.y.domain().reduce((a,b)=>a+b)/2 + (d.gain||0));
+            let py = curveY !== null ? scales.y(curveY + (d.gain || 0) + eqOffsetDiff) : scales.y(scales.y.domain().reduce((a,b)=>a+b)/2 + (d.gain||0));
             return `translate(${px},${py})`;
         }).classed("disabled", d => d.disabled);
 
@@ -753,10 +759,12 @@ const InteractiveEQ = (function() {
         }
         let phoneObj = getEQPhoneObj();
         let curveY = samplePhoneCurveAt(phoneObj, freq);
+        // Account for EQ variant offset difference
+        let eqOffsetDiff = phoneObj && phoneObj.eq ? (phoneObj.eq.offset || 0) - (phoneObj.offset || 0) : 0;
 
         let gain;
         if (curveY !== null) {
-            gain = targetY - curveY;
+            gain = targetY - curveY - eqOffsetDiff;
         } else {
             let yd = scales.y.domain();
             let center = (yd[0] + yd[1]) / 2;

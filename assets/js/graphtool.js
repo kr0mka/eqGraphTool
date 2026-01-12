@@ -1322,6 +1322,7 @@ function setOffset(p, o) {
     p.offset = +o;
     if (baseline.p === p) { baseline = getBaseline(p); }
     updatePaths();
+    if (window.updateEQHandles) window.updateEQHandles();
 }
 let getOffset = p => p.offset + p.norm;
 
@@ -3453,11 +3454,15 @@ function addExtra() {
         if (!phoneObj || (!filters.length && !phoneObj.eq)) {
             return; // Allow empty filters if eq is applied before
         }
+        // Preserve existing EQ variant offset, or inherit from parent if new
+        let existingEQOffset = phoneObj.eq ? phoneObj.eq.offset : null;
         let phoneEQ = { name: phoneObj.dispName + " EQ" };
         let phoneObjEQ = addOrUpdatePhone(phoneObj.brand, phoneEQ,
             phoneObj.rawChannels.map(c => c ? Equalizer.apply(c, filters) : null));
         phoneObj.eq = phoneObjEQ;
         phoneObjEQ.eqParent = phoneObj;
+        // Set offset: use existing EQ offset if available, otherwise inherit from parent
+        phoneObjEQ.offset = existingEQOffset !== null ? existingEQOffset : (phoneObj.offset || 0);
         updatePreampDisplay();
         showPhone(phoneObjEQ, false);
         activeElem.focus({ preventScroll: true });
