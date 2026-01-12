@@ -2643,6 +2643,18 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         }
     });
 
+    // Shift + scroll adjustment for levels inputs (phone offset)
+    document.addEventListener('wheel', function(e) {
+        if (!e.shiftKey) return;
+        const input = e.target.closest('td.levels input');
+        if (!input) return;
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.1 : -0.1;
+        const newValue = Math.round((parseFloat(input.value || 0) + delta) * 10) / 10;
+        input.value = newValue;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { passive: false });
+
     // Bass frequency cycling on label click
     doc.select("#bass-freq-label").on("click", function () {
         const freqOptions = [55, 80, 105, 150];
