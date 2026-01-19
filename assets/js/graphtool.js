@@ -110,16 +110,16 @@ doc.html(`
             <span>Half-tilt (dB)</span>
           </div>
           <div class="advanced-adjustment" style="display:none">
+            <input type="number" inputmode="decimal" id="cusdf-ear" value="`+ default_ear +`" step="0.1""></input>
+            <span id="ear-freq-label" style="cursor:pointer">Ear Gain (`+ default_ear_freq +`Hz)</span>
+          </div>
+          <div class="advanced-adjustment" style="display:none">
             <input type="number" inputmode="decimal" id="cusdf-treb" value="`+ default_treble +`" step="0.1""></input>
-            <span>Treble (dB)</span>
+            <span id="treble-freq-label" style="cursor:pointer">Treble (`+ default_treble_freq +`Hz)</span>
           </div>
           <div class="advanced-adjustment" style="display:none">
             <input type="number" inputmode="decimal" id="cusdf-air" value="`+ default_air +`" step="0.1""></input>
             <span>Air (dB)</span>
-          </div>
-          <div class="advanced-adjustment" style="display:none">
-            <input type="number" inputmode="decimal" id="cusdf-ear" value="`+ default_ear +`" step="0.1""></input>
-            <span>Ear Gain (dB)</span>
           </div>
           <button id="cusdf-UnTiltTHIS" style="margin-right: 10px">Remove Adjustments</button>
           <button id="cusdf-harmanfilters" style="margin-right: 10px">Harman Filters</button>
@@ -382,6 +382,8 @@ let boost = default_bass_shelf;
 let tilt = default_tilt;
 let halftilt = default_halftilt;
 let bassFreq = default_bass_freq;
+let earFreq = default_ear_freq;
+let trebleFreq = default_treble_freq;
 let air = default_air;
 let ear = default_ear;
 let treble = default_treble;
@@ -1363,7 +1365,7 @@ function addPhonesToUrl() {
         title = namesCombined + " - " + title;
     }
     if (tiltableTargets.some(target => names.includes(target + " Target"))) {
-        url += "&bass="+boost+"&tilt="+tilt+"&halftilt="+halftilt+"&treble="+treble+"&ear="+ear+"&air="+air+"&bassfreq="+bassFreq;
+        url += "&bass="+boost+"&tilt="+tilt+"&halftilt="+halftilt+"&treble="+treble+"&ear="+ear+"&air="+air+"&bassfreq="+bassFreq+"&treblefreq="+trebleFreq+"&earfreq="+earFreq;
     }
     if (names.length === 1) {
         targetWindow.document.querySelector("link[rel='canonical']").setAttribute("href",url)
@@ -2299,11 +2301,13 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
             cDFtr = "treble=",
             cDFe = "ear=",
             cDFa = "air=",
-            cDFbf = "bassfreq=";
+            cDFbf = "bassfreq=",
+            cDFtrf = "treblefreq=",
+            cDFef = "earfreq=";
         baseURL = url.split("?").shift();
         let match = decodeURIComponent(url.replace(/_/g," ")).match(/share=([^&]+)/);
         let str = match && match[1] ? match[1].replace("share=", "") : null;
-        let cTiltParams = decodeURIComponent(url.replace(/_/g," ")).match(/bass=([^&]+)&tilt=([^&]+)(?:&halftilt=([^&]+))?&treble=([^&]+)&ear=([^&]+)(?:&air=([^&]+))?(?:&bassfreq=([^&]+))?/);
+        let cTiltParams = decodeURIComponent(url.replace(/_/g," ")).match(/bass=([^&]+)&tilt=([^&]+)(?:&halftilt=([^&]+))?&treble=([^&]+)&ear=([^&]+)(?:&air=([^&]+))?(?:&bassfreq=([^&]+))?(?:&treblefreq=([^&]+))?(?:&earfreq=([^&]+))?/);
         if (url.includes(par) && url.includes(emb)) {
             //initReq = decodeURIComponent(url.replace(/_/g," ").split(par).pop()).split(",");
             initReq = str.split(",");
@@ -2340,6 +2344,14 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
 
         if (url.includes(cDFbf) && cTiltParams && cTiltParams[7]) {
             bassFreq = parseFloat(cTiltParams[7]);
+        }
+
+        if (url.includes(cDFtrf) && cTiltParams && cTiltParams[8]) {
+            trebleFreq = parseFloat(cTiltParams[8]);
+        }
+
+        if (url.includes(cDFef) && cTiltParams && cTiltParams[9]) {
+            earFreq = parseFloat(cTiltParams[9]);
         }
 
 
@@ -2456,6 +2468,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         doc.select("#cusdf-ear").node().value = ear;
         doc.select("#cusdf-treb").node().value = treble;
         doc.select("#bass-freq-label").text("Bass (" + bassFreq + "Hz)");
+        doc.select("#ear-freq-label").text("Ear Gain (" + earFreq + "Hz)");
+        doc.select("#treble-freq-label").text("Treble (" + trebleFreq + "Hz)");
     }
     updateDispVals();
 
@@ -2490,6 +2504,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         treble = 0;
         air = 0;
         bassFreq = 105;
+        earFreq = default_ear_freq;
+        trebleFreq = default_treble_freq;
         updateDF(boost, tilt, halftilt, ear, treble, air, bassFreq);
         updateDispVals();
     });
@@ -2504,8 +2520,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         let filters = [
             {disabled: false, type:"LSQ", freq:bassFreq, q:0.707, gain:boost},
             {disabled: false, type:"HSQ", freq:633, q:0.4, gain:halftilt},
-            {disabled: false, type:"PK", freq:3000, q:1, gain:ear},
-            {disabled: false, type:"HSQ", freq:2500, q:0.42, gain:treble},
+            {disabled: false, type:"PK", freq:earFreq, q:1, gain:ear},
+            {disabled: false, type:"HSQ", freq:trebleFreq, q:0.42, gain:treble},
             {disabled: false, type:"HSQ", freq:10000, q:0.707, gain:air}
         ];
         let bass = df.rawChannels.map(c => c ? Equalizer.apply(c, filters) : null);
@@ -2656,13 +2672,346 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }, { passive: false });
 
-    // Bass frequency cycling on label click
-    doc.select("#bass-freq-label").on("click", function () {
-        const freqOptions = [55, 80, 105, 150];
-        const currentIndex = freqOptions.indexOf(bassFreq);
-        bassFreq = freqOptions[(currentIndex + 1) % freqOptions.length];
-        this.textContent = "Bass (" + bassFreq + "Hz)";
-        updateDF(boost, tilt, halftilt, ear, treble, air, bassFreq);
+    // Helper: Create custom slider that won't drop drag state during graph updates
+    function createCustomSlider(config) {
+        const { min, max, step, value, onChange } = config;
+
+        const container = document.createElement("div");
+        container.className = "custom-slider";
+
+        // Track
+        const track = document.createElement("div");
+        track.className = "custom-slider-track";
+        container.appendChild(track);
+
+        // Fill
+        const fill = document.createElement("div");
+        fill.className = "custom-slider-fill";
+        track.appendChild(fill);
+
+        // Thumb
+        const thumb = document.createElement("div");
+        thumb.className = "custom-slider-thumb";
+        container.appendChild(thumb);
+
+        let currentValue = value;
+        let isDragging = false;
+
+        function valueToPercent(val) {
+            return (val - min) / (max - min) * 100;
+        }
+
+        function percentToValue(pct) {
+            let val = min + (pct / 100) * (max - min);
+            val = Math.round(val / step) * step;
+            return Math.max(min, Math.min(max, val));
+        }
+
+        function updateVisuals() {
+            const pct = valueToPercent(currentValue);
+            thumb.style.left = pct + "%";
+            fill.style.width = pct + "%";
+        }
+
+        function setValue(newValue) {
+            newValue = Math.round(newValue / step) * step;
+            newValue = Math.max(min, Math.min(max, newValue));
+            if (newValue !== currentValue) {
+                currentValue = newValue;
+                updateVisuals();
+                onChange(currentValue);
+            }
+        }
+
+        function handleMove(clientX) {
+            const rect = track.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100));
+            setValue(percentToValue(pct));
+        }
+
+        // Pointer events for drag handling
+        thumb.addEventListener("pointerdown", function(e) {
+            isDragging = true;
+            thumb.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+
+        thumb.addEventListener("pointermove", function(e) {
+            if (isDragging) {
+                handleMove(e.clientX);
+            }
+        });
+
+        thumb.addEventListener("pointerup", function(e) {
+            isDragging = false;
+            thumb.releasePointerCapture(e.pointerId);
+        });
+
+        thumb.addEventListener("pointercancel", function(e) {
+            isDragging = false;
+        });
+
+        // Click on track to jump
+        track.addEventListener("click", function(e) {
+            handleMove(e.clientX);
+        });
+
+        updateVisuals();
+
+        return { element: container, getValue: () => currentValue, setValue: setValue };
+    }
+
+    // Helper to fade out and remove popup
+    function fadeOutPopup(popup) {
+        if (!popup || popup.empty()) return;
+        popup.classed("fade-out", true);
+        setTimeout(() => popup.remove(), 150);
+    }
+
+    // Bass frequency slider popup on label click
+    doc.select("#bass-freq-label").on("click", function (event) {
+        // If this popup is already open, just close it
+        const existingPopup = d3.select(".bass-freq-popup");
+        if (!existingPopup.empty()) {
+            fadeOutPopup(existingPopup);
+            return;
+        }
+
+        // Fade out any other popups
+        d3.selectAll(".freq-slider-popup").each(function() {
+            fadeOutPopup(d3.select(this));
+        });
+
+        const buttonRect = this.getBoundingClientRect();
+        const minVal = 40, maxVal = 220, stepVal = 5;
+
+        // Create popup
+        const popup = d3.select("body").append("div")
+            .attr("class", "freq-slider-popup bass-freq-popup")
+            .style("top", (buttonRect.top - 85) + "px")
+            .style("left", (buttonRect.left - 40) + "px");
+
+        const labelDiv = popup.append("div")
+            .attr("class", "freq-slider-label");
+
+        labelDiv.append("span").text("Bass Frequency:");
+
+        const valueInput = labelDiv.append("input")
+            .attr("class", "freq-slider-input")
+            .attr("type", "number")
+            .attr("min", minVal)
+            .attr("max", maxVal)
+            .attr("step", stepVal)
+            .attr("value", bassFreq);
+
+        labelDiv.append("span").text("Hz");
+
+        let sliderRef = null;
+
+        // Create custom slider
+        const customSlider = createCustomSlider({
+            min: minVal, max: maxVal, step: stepVal, value: bassFreq,
+            onChange: function(val) {
+                bassFreq = val;
+                valueInput.node().value = bassFreq;
+                updateDF(boost, tilt, halftilt, ear, treble, air, bassFreq, "bassfreq");
+                updateDispVals();
+            }
+        });
+        sliderRef = customSlider;
+
+        popup.node().appendChild(customSlider.element);
+
+        // Input change handler
+        valueInput.on("input", function() {
+            let val = Math.round(+this.value / stepVal) * stepVal;
+            val = Math.max(minVal, Math.min(maxVal, val));
+            this.value = val;
+            sliderRef.setValue(val);
+        });
+
+        // Shift+scroll on whole popup
+        popup.node().addEventListener("wheel", function(e) {
+            if (!e.shiftKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const delta = e.deltaY < 0 ? stepVal : -stepVal;
+            sliderRef.setValue(bassFreq + delta);
+        }, { passive: false });
+
+        // Click outside to close with fade (allows click to pass through)
+        const closeOnClickOutside = function(e) {
+            if (!popup.node().contains(e.target)) {
+                popup.classed("fade-out", true);
+                setTimeout(() => popup.remove(), 150);
+                document.removeEventListener("click", closeOnClickOutside, true);
+            }
+        };
+        setTimeout(() => document.addEventListener("click", closeOnClickOutside, true), 0);
+    });
+
+    // Ear Gain frequency slider popup on label click
+    doc.select("#ear-freq-label").on("click", function () {
+        // If this popup is already open, just close it
+        const existingPopup = d3.select(".ear-freq-popup");
+        if (!existingPopup.empty()) {
+            fadeOutPopup(existingPopup);
+            return;
+        }
+
+        // Fade out any other popups
+        d3.selectAll(".freq-slider-popup").each(function() {
+            fadeOutPopup(d3.select(this));
+        });
+
+        const buttonRect = this.getBoundingClientRect();
+        const minVal = 2000, maxVal = 4000, stepVal = 100;
+
+        // Create popup
+        const popup = d3.select("body").append("div")
+            .attr("class", "freq-slider-popup ear-freq-popup")
+            .style("top", (buttonRect.top - 85) + "px")
+            .style("left", (buttonRect.left - 40) + "px");
+
+        const labelDiv = popup.append("div")
+            .attr("class", "freq-slider-label");
+
+        labelDiv.append("span").text("Ear Gain Frequency:");
+
+        const valueInput = labelDiv.append("input")
+            .attr("class", "freq-slider-input")
+            .attr("type", "number")
+            .attr("min", minVal)
+            .attr("max", maxVal)
+            .attr("step", stepVal)
+            .attr("value", earFreq);
+
+        labelDiv.append("span").text("Hz");
+
+        let sliderRef = null;
+
+        // Create custom slider
+        const customSlider = createCustomSlider({
+            min: minVal, max: maxVal, step: stepVal, value: earFreq,
+            onChange: function(val) {
+                earFreq = val;
+                valueInput.node().value = earFreq;
+                updateDF(boost, tilt, halftilt, ear, treble, air, bassFreq, "earfreq");
+                updateDispVals();
+            }
+        });
+        sliderRef = customSlider;
+
+        popup.node().appendChild(customSlider.element);
+
+        // Input change handler
+        valueInput.on("input", function() {
+            let val = Math.round(+this.value / stepVal) * stepVal;
+            val = Math.max(minVal, Math.min(maxVal, val));
+            this.value = val;
+            sliderRef.setValue(val);
+        });
+
+        // Shift+scroll on whole popup
+        popup.node().addEventListener("wheel", function(e) {
+            if (!e.shiftKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const delta = e.deltaY < 0 ? stepVal : -stepVal;
+            sliderRef.setValue(earFreq + delta);
+        }, { passive: false });
+
+        // Click outside to close with fade (allows click to pass through)
+        const closeOnClickOutside = function(e) {
+            if (!popup.node().contains(e.target)) {
+                popup.classed("fade-out", true);
+                setTimeout(() => popup.remove(), 150);
+                document.removeEventListener("click", closeOnClickOutside, true);
+            }
+        };
+        setTimeout(() => document.addEventListener("click", closeOnClickOutside, true), 0);
+    });
+
+    // Treble frequency slider popup on label click
+    doc.select("#treble-freq-label").on("click", function () {
+        // If this popup is already open, just close it
+        const existingPopup = d3.select(".treble-freq-popup");
+        if (!existingPopup.empty()) {
+            fadeOutPopup(existingPopup);
+            return;
+        }
+
+        // Fade out any other popups
+        d3.selectAll(".freq-slider-popup").each(function() {
+            fadeOutPopup(d3.select(this));
+        });
+
+        const buttonRect = this.getBoundingClientRect();
+        const minVal = 1000, maxVal = 5000, stepVal = 100;
+
+        // Create popup
+        const popup = d3.select("body").append("div")
+            .attr("class", "freq-slider-popup treble-freq-popup")
+            .style("top", (buttonRect.top - 85) + "px")
+            .style("left", (buttonRect.left - 40) + "px");
+
+        const labelDiv = popup.append("div")
+            .attr("class", "freq-slider-label");
+
+        labelDiv.append("span").text("Treble Frequency:");
+
+        const valueInput = labelDiv.append("input")
+            .attr("class", "freq-slider-input")
+            .attr("type", "number")
+            .attr("min", minVal)
+            .attr("max", maxVal)
+            .attr("step", stepVal)
+            .attr("value", trebleFreq);
+
+        labelDiv.append("span").text("Hz");
+
+        let sliderRef = null;
+
+        // Create custom slider
+        const customSlider = createCustomSlider({
+            min: minVal, max: maxVal, step: stepVal, value: trebleFreq,
+            onChange: function(val) {
+                trebleFreq = val;
+                valueInput.node().value = trebleFreq;
+                updateDF(boost, tilt, halftilt, ear, treble, air, bassFreq, "treblefreq");
+                updateDispVals();
+            }
+        });
+        sliderRef = customSlider;
+
+        popup.node().appendChild(customSlider.element);
+
+        // Input change handler
+        valueInput.on("input", function() {
+            let val = Math.round(+this.value / stepVal) * stepVal;
+            val = Math.max(minVal, Math.min(maxVal, val));
+            this.value = val;
+            sliderRef.setValue(val);
+        });
+
+        // Shift+scroll on whole popup
+        popup.node().addEventListener("wheel", function(e) {
+            if (!e.shiftKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const delta = e.deltaY < 0 ? stepVal : -stepVal;
+            sliderRef.setValue(trebleFreq + delta);
+        }, { passive: false });
+
+        // Click outside to close with fade (allows click to pass through)
+        const closeOnClickOutside = function(e) {
+            if (!popup.node().contains(e.target)) {
+                popup.classed("fade-out", true);
+                setTimeout(() => popup.remove(), 150);
+                document.removeEventListener("click", closeOnClickOutside, true);
+            }
+        };
+        setTimeout(() => document.addEventListener("click", closeOnClickOutside, true), 0);
     });
 
     // Harman Filters button
