@@ -700,6 +700,28 @@ function clearLabels() {
     setLabelButton(false);
 }
 
+// Helper to render text with subscript markers as SVG tspan elements
+function renderTextWithSubscripts(textElement, text) {
+    // Clear existing content
+    textElement.selectAll('*').remove();
+    textElement.text('');
+
+    // Parse text for {{sub:...}} markers
+    const parts = text.split(/(\{\{sub:\d+\}\})/);
+    parts.forEach(part => {
+        const match = part.match(/\{\{sub:(\d+)\}\}/);
+        if (match) {
+            // Subscript part - smaller but inline (no baseline shift)
+            textElement.append('tspan')
+                .attr('font-size', '0.5em')
+                .text(match[1]);
+        } else if (part) {
+            // Regular text
+            textElement.append('tspan').text(part);
+        }
+    });
+}
+
 function drawLabels() {
     let curves = d3.merge(
         activePhones.filter(p=>!p.hide && !p.isPrefBounds).map(p =>
@@ -728,7 +750,7 @@ function drawLabels() {
         .join("g").attr("class","lineLabel").attr("opacity", 0);
     let t = g.append("text")
         .attrs({x:0, y:0, fill:c=>getTooltipColor(c)})
-        .text(c=>c.id);
+        .each(function(c) { renderTextWithSubscripts(d3.select(this), c.id); });
     g.datum(function(){return this.getBBox();});
     g.select("text").attrs(b=>({x:3-b.x, y:3-b.y}));
     g.insert("rect", "text")
@@ -2510,6 +2532,11 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         updateDispVals();
     });
     
+    // Helper function to create subscript marker for later tspan rendering
+    function toSubscript(num) {
+        return '{{sub:' + num + '}}';
+    }
+
     updateDF = (boost, tilt, halftilt, ear, treble, air, bassFreq, change) => {
         // check if user is trying to tilt non tiltable targets
         let activeTarget = activePhones.filter(p => p.isTarget)[0];
@@ -2544,10 +2571,10 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         let adjustmentParts = [];
         if (tilt != 0) adjustmentParts.push("Tilt: " + tilt + "dB/Oct");
         if (halftilt != 0) adjustmentParts.push("Half-tilt: " + halftilt + "dB");
-        if (boost != 0) adjustmentParts.push("B: " + boost + "dB");
-        if (treble != 0) adjustmentParts.push("T: " + treble + "dB");
+        if (boost != 0) adjustmentParts.push("B" + toSubscript(bassFreq) + " " + boost + "dB");
+        if (ear != 0) adjustmentParts.push("E" + toSubscript(earFreq) + " " + ear + "dB");
+        if (treble != 0) adjustmentParts.push("T" + toSubscript(trebleFreq) + " " + treble + "dB");
         if (air != 0) adjustmentParts.push("Air: " + air + "dB");
-        if (ear != 0) adjustmentParts.push("3kHz: " + ear + "dB");
         let preferenceAdjustments = adjustmentParts.length > 0 ? " (" + adjustmentParts.join(", ") + ")" : " ";
 
         if (harmanFilters) {
@@ -3225,7 +3252,7 @@ let graphInteract = imm => function () {
         function newTooltip(t) {
             t.attr("class","lineLabel")
                 .attr("fill",d=>getTooltipColor(d));
-            t.append("text").attr("x",2).text(d=>d.id);
+            t.append("text").attr("x",2).each(function(d) { renderTextWithSubscripts(d3.select(this), d.id); });
             t.append("g").selectAll().data([0,1])
                 .join("text")
                 .attr("x",-16)

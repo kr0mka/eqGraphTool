@@ -107,8 +107,8 @@ svg text {
 
 svg text.graph-name {
     fill: var(--font-color-primary);
-    
-    font-family: var(--font-primary);
+
+    font-family: var(--font-primary), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     font-weight: 700;
 }
 
