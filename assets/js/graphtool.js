@@ -722,6 +722,13 @@ function renderTextWithSubscripts(textElement, text) {
     });
 }
 
+// Helper to convert subscript markers to HTML for non-SVG elements
+function textWithSubscriptsToHTML(text) {
+    // Wrap in a span to prevent inner spans from becoming flex items in flex containers
+    const inner = text.replace(/{{sub:(\d+)}}/g, '<span style="font-size:0.65em">$1</span>');
+    return '<span>' + inner + '</span>';
+}
+
 function drawLabels() {
     let curves = d3.merge(
         activePhones.filter(p=>!p.hide && !p.isPrefBounds).map(p =>
@@ -1778,7 +1785,7 @@ function updateKey(s) {
 }
 
 function addModel(t) {
-    let n = t.append("div").attr("class","phonename").text(p=>p.dispName);
+    let n = t.append("div").attr("class","phonename").html(p=>textWithSubscriptsToHTML(p.dispName));
     t.filter(p=>p.fileNames)
         .append("div").attr("class","variants")
         .call(function (s) {
@@ -1838,7 +1845,7 @@ function addModel(t) {
             n.selectAll("div")
                 .call(setHover, h=>p=>null)
                 .transition().style("top",0+"em").remove()
-                .end().then(()=>n.text(p=>p.dispName));
+                .end().then(()=>n.html(p=>textWithSubscriptsToHTML(p.dispName)));
             changeVariant(p, updateVariant);
             table.selectAll("tr").classed("highlight", false); // Prevents some glitches
         });
