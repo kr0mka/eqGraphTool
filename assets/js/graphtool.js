@@ -2822,8 +2822,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
 
         popup.node().appendChild(customSlider.element);
 
-        // Input change handler
-        valueInput.on("input", function() {
+        // Input change handler - use 'change' so user can type full value before validation
+        valueInput.on("change", function() {
             let val = Math.round(+this.value / stepVal) * stepVal;
             val = Math.max(minVal, Math.min(maxVal, val));
             this.value = val;
@@ -2904,8 +2904,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
 
         popup.node().appendChild(customSlider.element);
 
-        // Input change handler
-        valueInput.on("input", function() {
+        // Input change handler - use 'change' so user can type full value before validation
+        valueInput.on("change", function() {
             let val = Math.round(+this.value / stepVal) * stepVal;
             val = Math.max(minVal, Math.min(maxVal, val));
             this.value = val;
@@ -2986,8 +2986,8 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
 
         popup.node().appendChild(customSlider.element);
 
-        // Input change handler
-        valueInput.on("input", function() {
+        // Input change handler - use 'change' so user can type full value before validation
+        valueInput.on("change", function() {
             let val = Math.round(+this.value / stepVal) * stepVal;
             val = Math.max(minVal, Math.min(maxVal, val));
             this.value = val;
