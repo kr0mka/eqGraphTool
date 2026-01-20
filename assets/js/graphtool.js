@@ -1383,6 +1383,14 @@ let ifURL = typeof share_url !== "undefined" && share_url;
 let baseTitle = typeof page_title !== "undefined" ? page_title : "Haruto's Graph Tool (CrinGraph)";
 let baseDescription = typeof page_description !== "undefined" ? page_description : "View and compare frequency response graphs";
 let baseURL;  // Set by setInitPhones
+
+// Debounce timer for URL updates to prevent "Too many calls to History API" errors
+let urlUpdateTimer = null;
+function addPhonesToUrlDebounced() {
+    if (urlUpdateTimer) clearTimeout(urlUpdateTimer);
+    urlUpdateTimer = setTimeout(addPhonesToUrl, 100);
+}
+
 function addPhonesToUrl() {
     let title = baseTitle,
         url = baseURL,
@@ -1434,7 +1442,7 @@ function updatePaths(trigger) {
             d3.select(nodes[i]).style("stroke-dasharray", g.p.dashStyle);
         }
     }
-    if (ifURL && !trigger) addPhonesToUrl();
+    if (ifURL && !trigger) addPhonesToUrlDebounced();
     if (stickyLabels && !(typeof InteractiveEQ !== 'undefined' && InteractiveEQ.isEnabled())) drawLabels();
     // Update interactive EQ handles when graph changes
     if (window.updateEQHandles) window.updateEQHandles();
