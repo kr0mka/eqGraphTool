@@ -1341,8 +1341,8 @@ function setBaseline(b, no_transition) {
     table.selectAll("tr").select(".button")
         .classed("selected", p=>p===baseline.p);
 
-    // Analytics event
-    if (analyticsEnabled && b.p) { pushPhoneTag("baseline_set", b.p); }
+    // Analytics event (skip during slider drag)
+    if (analyticsEnabled && b.p && !suppressUrlUpdate) { pushPhoneTag("baseline_set", b.p); }
 }
 function getBaseline(p) {
     let b = getAvg(p).map(d => d[1]+getOffset(p));
