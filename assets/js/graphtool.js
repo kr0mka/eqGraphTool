@@ -2191,8 +2191,8 @@ function showPhone(p, exclusive, suppressVariant, trigger) {
             // Scroll to selected
             if (trigger) { scrollToActive(); }
             
-            // Analytics event
-            if (analyticsEnabled) { pushPhoneTag("phone_displayed", p, trigger); }
+            // Analytics event (skip during slider drag)
+            if (analyticsEnabled && !suppressUrlUpdate) { pushPhoneTag("phone_displayed", p, trigger); }
         });
         return;
     }
