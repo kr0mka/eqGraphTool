@@ -1384,11 +1384,19 @@ let baseTitle = typeof page_title !== "undefined" ? page_title : "Haruto's Graph
 let baseDescription = typeof page_description !== "undefined" ? page_description : "View and compare frequency response graphs";
 let baseURL;  // Set by setInitPhones
 
-// Debounce timer for URL updates to prevent "Too many calls to History API" errors
+// URL update control - suppress during slider drag, debounce for scroll adjustments
 let urlUpdateTimer = null;
-function addPhonesToUrlDebounced() {
+let suppressUrlUpdate = false;
+
+function addPhonesToUrlDebounced(delay = 150) {
+    if (suppressUrlUpdate) return;
     if (urlUpdateTimer) clearTimeout(urlUpdateTimer);
-    urlUpdateTimer = setTimeout(addPhonesToUrl, 100);
+    urlUpdateTimer = setTimeout(addPhonesToUrl, delay);
+}
+
+function triggerUrlUpdate() {
+    if (urlUpdateTimer) clearTimeout(urlUpdateTimer);
+    addPhonesToUrl();
 }
 
 function addPhonesToUrl() {
@@ -2774,6 +2782,7 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         // Pointer events for drag handling
         thumb.addEventListener("pointerdown", function(e) {
             isDragging = true;
+            suppressUrlUpdate = true;  // Suppress URL updates during drag
             thumb.setPointerCapture(e.pointerId);
             e.preventDefault();
         });
@@ -2787,15 +2796,19 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
         thumb.addEventListener("pointerup", function(e) {
             isDragging = false;
             thumb.releasePointerCapture(e.pointerId);
+            suppressUrlUpdate = false;
+            triggerUrlUpdate();  // Update URL on release
         });
 
         thumb.addEventListener("pointercancel", function(e) {
             isDragging = false;
+            suppressUrlUpdate = false;
         });
 
         // Click on track to jump
         track.addEventListener("click", function(e) {
             handleMove(e.clientX);
+            triggerUrlUpdate();  // Update URL on track click
         });
 
         updateVisuals();
