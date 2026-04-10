@@ -4871,17 +4871,37 @@ function updatePreampDisplay() {
     volumeNode.connect(audioContext.destination);
 
     // Filters
+    let activeFilterNodes = []; // persistent BiquadFilterNode cache
+
+    function filterTypeString(type) {
+        if (type == "PK") return "peaking";
+        if (type == "LSQ") return "lowshelf";
+        if (type == "HSQ") return "highshelf";
+        return "peaking";
+    }
+
     function updateFilters(filters) {
         if (filters.length == 0) {
             filters = [{ type: "PK", freq: 20, q: 0, gain: 0 }];
         }
-    
+
+        // If topology matches (same count + same types), just update params — no reconnect, no glitch
+        if (activeFilterNodes.length === filters.length &&
+            filters.every((f, i) => activeFilterNodes[i].type === filterTypeString(f.type))) {
+            filters.forEach((f, i) => {
+                activeFilterNodes[i].frequency.value = f.freq;
+                activeFilterNodes[i].Q.value = f.q;
+                activeFilterNodes[i].gain.value = f.gain;
+            });
+            return;
+        }
+
         applyFilters(audioContext, currentSource, filters);
     }
 
     function applyFilters(audioContext, inputNode, filters) {
         const nodes = [inputNode];
-    
+
         nodes[nodes.length - 1].disconnect();
 
         if (inputNode == pinkNoiseSource || inputNode == toneGeneratorOsc) {
@@ -4889,32 +4909,26 @@ function updatePreampDisplay() {
             const splitter = audioContext.createChannelSplitter(2);
             inputNode.connect(splitter);
             nodes.push(splitter);
-        
+
             const merger = audioContext.createChannelMerger(2);
             nodes[nodes.length - 1].connect(merger, 0, 0); // Connect to the left channel
             nodes[nodes.length - 1].connect(merger, 0, 1); // Connect to the right channel
             nodes.push(merger);
         }
-        
+
+        activeFilterNodes = [];
         filters.forEach(filterInfo => {
             const filter = audioContext.createBiquadFilter();
-            let type;
-            if (filterInfo.type == "PK") {
-                type = "peaking";
-            } else if (filterInfo.type == "LSQ") {
-                type = "lowshelf";
-            } else if (filterInfo.type == "HSQ") {
-                type = "highshelf";
-            }
-            filter.type = type;
+            filter.type = filterTypeString(filterInfo.type);
             filter.frequency.value = filterInfo.freq;
             filter.Q.value = filterInfo.q;
             filter.gain.value = filterInfo.gain;
-            
+
             nodes[nodes.length - 1].connect(filter);
             nodes.push(filter);
+            activeFilterNodes.push(filter);
         });
-        
+
         nodes[nodes.length - 1].connect(channelSplitter);
     }
 

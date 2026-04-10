@@ -183,7 +183,7 @@ const InteractiveEQ = (function() {
     function bindHandleEvents(sel) {
         let filterInputs = callbacks.getFilterInputs();
 
-        function startDrag(d, element, clientX, clientY) {
+        function startDrag(d, element, clientX, clientY, ctrlKeyAtStart) {
             if (!enabled) return;
 
             let handle = d3.select(element);
@@ -195,6 +195,12 @@ const InteractiveEQ = (function() {
             blockFocus = true;
             var savedScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
             var savedScrollX = window.scrollX || window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+
+            // Ctrl axis lock: null = free, 'freq' = horizontal only, 'gain' = vertical only
+            let ctrlAxisLock = null;
+            let initInputs = callbacks.getFilterInputs();
+            let initialFreq = parseFloat(initInputs.freq[filterIndex] && initInputs.freq[filterIndex].value) || d.freq || 1000;
+            let initialGain = parseFloat(initInputs.gain[filterIndex] && initInputs.gain[filterIndex].value) || d.gain || 0;
 
             function onMove(e) {
                 e.preventDefault();
@@ -212,6 +218,14 @@ const InteractiveEQ = (function() {
                 moved = true;
                 wasDragged = true;
 
+                // Determine axis lock on first significant movement when Ctrl held
+                if (ctrlKeyAtStart && ctrlAxisLock === null) {
+                    let dx = Math.abs(cx - startX);
+                    let dy = Math.abs(cy - startY);
+                    ctrlAxisLock = dx >= dy ? 'freq' : 'gain';
+                }
+
+                let shiftHeld = e.shiftKey;
                 if (pendingFrame) return;
                 pendingFrame = requestAnimationFrame(() => {
                     pendingFrame = null;
@@ -220,35 +234,71 @@ const InteractiveEQ = (function() {
                     pt.x = cx; pt.y = cy;
                     let svgPt = pt.matrixTransform(svg.gr.node().getScreenCTM().inverse());
 
-                    let newFreq = Math.round(scales.x.invert(svgPt.x));
-                    newFreq = Math.max(20, Math.min(20000, newFreq));
-
-                    let targetY = scales.y.invert(svgPt.y);
                     let phoneObj = getEQPhoneObj();
-                    let curveY = samplePhoneCurveAt(phoneObj, newFreq);
-                    // Account for EQ variant offset difference
                     let eqOffsetDiff = phoneObj && phoneObj.eq ? (phoneObj.eq.offset || 0) - (phoneObj.offset || 0) : 0;
+                    let newFreq, newGain, px, py;
 
-                    let newGain;
-                    if (curveY !== null) {
-                        newGain = targetY - curveY - eqOffsetDiff;
+                    if (ctrlAxisLock === 'freq') {
+                        // Horizontal only: update freq, lock gain
+                        newFreq = Math.round(scales.x.invert(svgPt.x));
+                        newFreq = Math.max(20, Math.min(20000, newFreq));
+                        newGain = initialGain;
+                        px = scales.x(newFreq);
+                        let curveY = samplePhoneCurveAt(phoneObj, newFreq);
+                        if (curveY !== null) {
+                            py = scales.y(curveY + newGain + eqOffsetDiff);
+                        } else {
+                            let yd = scales.y.domain();
+                            py = scales.y((yd[0] + yd[1]) / 2 + newGain);
+                        }
+                    } else if (ctrlAxisLock === 'gain') {
+                        // Vertical only: lock freq, update gain
+                        newFreq = initialFreq;
+                        px = scales.x(newFreq);
+                        py = svgPt.y;
+                        let targetY = scales.y.invert(svgPt.y);
+                        let curveY = samplePhoneCurveAt(phoneObj, newFreq);
+                        if (curveY !== null) {
+                            newGain = targetY - curveY - eqOffsetDiff;
+                        } else {
+                            let yd = scales.y.domain();
+                            newGain = targetY - (yd[0] + yd[1]) / 2;
+                        }
+                        newGain = Math.round(newGain * 10) / 10;
+                        newGain = Math.max(-40, Math.min(40, newGain));
                     } else {
-                        let yd = scales.y.domain();
-                        let center = (yd[0] + yd[1]) / 2;
-                        newGain = targetY - center;
+                        // Free movement
+                        newFreq = Math.round(scales.x.invert(svgPt.x));
+                        newFreq = Math.max(20, Math.min(20000, newFreq));
+                        let targetY = scales.y.invert(svgPt.y);
+                        let curveY = samplePhoneCurveAt(phoneObj, newFreq);
+                        if (curveY !== null) {
+                            newGain = targetY - curveY - eqOffsetDiff;
+                        } else {
+                            let yd = scales.y.domain();
+                            newGain = targetY - (yd[0] + yd[1]) / 2;
+                        }
+                        newGain = Math.round(newGain * 10) / 10;
+                        newGain = Math.max(-40, Math.min(40, newGain));
+                        px = scales.x(newFreq);
+                        py = svgPt.y;
                     }
-                    newGain = Math.round(newGain * 10) / 10;
-                    newGain = Math.max(-40, Math.min(40, newGain));
 
                     filterInputs = callbacks.getFilterInputs();
                     if (filterInputs.freq[filterIndex]) filterInputs.freq[filterIndex].value = newFreq;
                     if (filterInputs.gain[filterIndex]) filterInputs.gain[filterIndex].value = newGain;
 
-                    let px = scales.x(newFreq);
-                    let py = scales.y(targetY);
                     handle.attr("transform", `translate(${px},${py})`);
 
+                    if (shiftHeld) {
+                        let q = parseFloat(filterInputs.q[filterIndex] && filterInputs.q[filterIndex].value) || 1;
+                        showQTooltip(px, py, q, getFilterColor(filterIndex));
+                    } else {
+                        hideQTooltip();
+                    }
+
                     updateEQPreview();
+                    callbacks.applyEQ();
                 });
             }
 
@@ -314,7 +364,7 @@ const InteractiveEQ = (function() {
         sel.on("mousedown", function(d) {
             d3.event.preventDefault();
             d3.event.stopPropagation();
-            startDrag(d, this, d3.event.clientX, d3.event.clientY);
+            startDrag(d, this, d3.event.clientX, d3.event.clientY, d3.event.ctrlKey);
         })
         .on("touchstart", function(d) {
             d3.event.preventDefault();
