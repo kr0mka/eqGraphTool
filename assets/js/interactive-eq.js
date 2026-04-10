@@ -359,6 +359,9 @@ const InteractiveEQ = (function() {
             filterInputs.q[idx].value = q;
             qManuallyModified.add(idx);
             callbacks.applyEQ();
+            if (d3.event.shiftKey) {
+                updateQTooltipForHover();
+            }
         })
         .on("click", function() {
             d3.event.preventDefault();
