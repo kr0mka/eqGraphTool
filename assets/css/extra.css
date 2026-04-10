@@ -713,6 +713,17 @@ div.extra-panel div.filters-button > button[class="pink-noise selected"] {
   accent-color: var(--accent-color-contrast);
 }
 
+#volumeDb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
 .volume-slider input[type="range"] {
   width: 100%;
   background: var(--background-color-graph);

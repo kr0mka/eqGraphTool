@@ -284,7 +284,8 @@ doc.html(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>
                   </div>
                   <div class="volume-slider">
-                    <input type="range" min="0" max="100" step="0.5" value="12.5" id="volumeRange">
+                    <input type="range" min="-60" max="0" step="0.5" value="-18" id="volumeRange">
+                    <span id="volumeDb">-18 dB</span>
                   </div>
                 </div>
                 <div id="play-button" style="fill: var(--accent-color-contrast) !important;">
@@ -4788,35 +4789,44 @@ function updatePreampDisplay() {
     // create and set the initial value of the volume slider
     const volumeIcon = document.querySelector('.volume-icon');
     const volumeRange = document.getElementById('volumeRange');
-    let currentVolume = 12.5;
+    const volumeDb = document.getElementById('volumeDb');
+    let currentVolume = -18; // dB
     let volumeNode = audioContext.createGain();
-    volumeNode.gain.value = 0.125;
+    volumeNode.gain.value = Math.pow(10, -18 / 20);
+
+    function dbToGain(db) { return Math.pow(10, db / 20); }
+    function updateVolumeDisplay(db) {
+        if (volumeDb) volumeDb.textContent = db + ' dB';
+    }
 
     // channel splitter and merger to split the audio into left and right channels
     let channelSplitter = audioContext.createChannelSplitter(2);
     let channelMerger = audioContext.createChannelMerger(2);
     let rightChannel = audioContext.createGain();
     let leftChannel = audioContext.createGain();
-    
+
     // volume stuff
     volumeIcon.addEventListener("click", () => {
         if (volumeIcon.classList.contains("muted")) {
             volumeIcon.classList.remove("muted");
             volumeIcon.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path d=\"M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z\"/></svg>"
             volumeRange.value = currentVolume;
-            volumeNode.gain.value = currentVolume/100;
+            volumeNode.gain.value = dbToGain(currentVolume);
+            updateVolumeDisplay(currentVolume);
         } else {
             volumeIcon.classList.add("muted");
             volumeIcon.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path d=\"M19 7.358v15.642l-8-5v-.785l8-9.857zm3-6.094l-1.548-1.264-3.446 4.247-6.006 3.753v3.646l-2 2.464v-6.11h-4v10h.843l-3.843 4.736 1.548 1.264 18.452-22.736z\"/></svg>"
-            currentVolume = volumeRange.value;
-            volumeRange.value = 0;
+            currentVolume = parseFloat(volumeRange.value);
+            volumeRange.value = -60;
             volumeNode.gain.value = 0;
+            updateVolumeDisplay('-∞');
         }
     });
-    
+
     volumeRange.addEventListener("input", () => {
-        currentVolume = volumeRange.value;
-        volumeNode.gain.value = volumeRange.value/100;
+        currentVolume = parseFloat(volumeRange.value);
+        volumeNode.gain.value = dbToGain(currentVolume);
+        updateVolumeDisplay(currentVolume);
     });
     
     // channel balance feature
@@ -4872,6 +4882,7 @@ function updatePreampDisplay() {
 
     // Filters
     let activeFilterNodes = []; // persistent BiquadFilterNode cache
+    let activeFilterSource = null; // source the current chain is built for
 
     function filterTypeString(type) {
         if (type == "PK") return "peaking";
@@ -4885,8 +4896,9 @@ function updatePreampDisplay() {
             filters = [{ type: "PK", freq: 20, q: 0, gain: 0 }];
         }
 
-        // If topology matches (same count + same types), just update params — no reconnect, no glitch
-        if (activeFilterNodes.length === filters.length &&
+        // If same source + same topology, just update params — no reconnect, no glitch
+        if (activeFilterSource === currentSource &&
+            activeFilterNodes.length === filters.length &&
             filters.every((f, i) => activeFilterNodes[i].type === filterTypeString(f.type))) {
             filters.forEach((f, i) => {
                 activeFilterNodes[i].frequency.value = f.freq;
@@ -4904,7 +4916,7 @@ function updatePreampDisplay() {
 
         nodes[nodes.length - 1].disconnect();
 
-        if (inputNode == pinkNoiseSource || inputNode == toneGeneratorOsc) {
+        if (inputNode == pinkNoiseSource || toneGenActive) {
             // Duplicate the mono/stereo channel into stereo
             const splitter = audioContext.createChannelSplitter(2);
             inputNode.connect(splitter);
@@ -4930,6 +4942,7 @@ function updatePreampDisplay() {
         });
 
         nodes[nodes.length - 1].connect(channelSplitter);
+        activeFilterSource = inputNode;
     }
 
     // load pink noise audio file
@@ -5045,7 +5058,7 @@ function updatePreampDisplay() {
         pinkNoisePlayButton.addEventListener("click", () => {
             if (pinkNoisePlayButton.classList.contains("playing")) {
                 if (toneGenActive && toneGeneratorOsc) {
-                    currentSource.stop();
+                    toneGeneratorOsc.stop();
                     toneGeneratorOsc = null;
                 } else {
                     currentAudio.pause();
@@ -5059,9 +5072,12 @@ function updatePreampDisplay() {
                     toneGeneratorOsc = audioContext.createOscillator();
                     toneGeneratorOsc.type = "sine";
                     toneGeneratorOsc.frequency.value = parseInt(toneGeneratorText.innerText);
-                    currentSource = toneGeneratorOsc;
+                    let toneGainNode = audioContext.createGain();
+                    toneGainNode.gain.value = 0.25; // -12dB headroom — oscillator outputs full-scale 1.0
+                    toneGeneratorOsc.connect(toneGainNode);
+                    currentSource = toneGainNode;
                     updateFilters(elemToFilters());
-                    currentSource.start();
+                    toneGeneratorOsc.start();
                 } else {
                     updateFilters(elemToFilters());
                     currentAudio.play();
