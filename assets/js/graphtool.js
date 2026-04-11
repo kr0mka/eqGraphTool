@@ -304,8 +304,8 @@ doc.html(`
                 <span><input name="tone-generator-to" type="number" min="20" max="20000" step="1" value="20000"></input></span>
               </div>
               <div class="eq-demo hidden" name="tone-gen-slider" style="margin:2px 0 6px 0;">
-                <span name="current-freq">Freq: <span class="freq-text">20</span> Hz</span>
-                <input name="tone-generator-freq" type="range" min="0" max="1" step="0.0001" value="0" />
+                <span name="current-freq">Freq: <span class="freq-text">1000</span> Hz</span>
+                <input name="tone-generator-freq" type="range" min="0" max="1" step="0.0001" value="0.5663" />
               </div>
               <h4 style="margin:0 0 3px 0">Miscellaneous</h4>
               <div class="settings-row" name="tone-gen-range" style="margin-top:0; text-align:center">
@@ -5004,6 +5004,7 @@ function updatePreampDisplay() {
 
     let fftRaf = null;
     let fftLastTime = null;
+    let fftDraining = false; // true after stop: keep looping until EMA decays to silence
 
     function drawFFTSpectrum(timestamp) {
         // Frame-rate independent symmetric smoothing on linear power (τ=80ms)
@@ -5063,20 +5064,39 @@ function updatePreampDisplay() {
             }
             const avgPow = sum / count;
             const db = avgPow > 1e-20 ? 10 * Math.log10(avgPow) : -120;
-            pts.push([x(freq), y(yDom[1] + db + 25)]); // 0 dBFS = top+25dB offset, scale matches grid
+            const rawY = y(yDom[1] + db + 25); // 0 dBFS = top+25dB offset, scale matches grid
+            pts.push([x(freq), Math.max(0, Math.min(yBottom, rawY))]);
         }
 
         let d = `M${pts[0][0]},${yBottom} L${pts[0][0]},${pts[0][1]}`;
         for (let i = 1; i < pts.length; i++) d += ` L${pts[i][0]},${pts[i][1]}`;
         d += ` L${pts[numPts-1][0]},${yBottom} Z`;
         fftPath.attr("d", d).attr("fill-opacity", 0.1);
+
+        // When draining: stop once all smoothed power is essentially silent
+        if (fftDraining) {
+            let maxPow = 0;
+            for (let k = 0; k < fftBinCount; k++) if (fftSmoothedPow[k] > maxPow) maxPow = fftSmoothedPow[k];
+            if (maxPow < 1e-12) {
+                fftPath.attr("d", null).attr("fill-opacity", 0);
+                fftRaf = null; fftDraining = false;
+                return;
+            }
+        }
+
         fftRaf = requestAnimationFrame(drawFFTSpectrum);
     }
 
-    function startFFT() { if (!fftRaf) { fftLastTime = null; fftRaf = requestAnimationFrame(drawFFTSpectrum); } }
+    function startFFT() {
+        fftDraining = false;
+        if (!fftRaf) { fftLastTime = null; fftRaf = requestAnimationFrame(drawFFTSpectrum); }
+    }
     function stopFFT() {
-        if (fftRaf) { cancelAnimationFrame(fftRaf); fftRaf = null; }
-        fftPath.attr("d", null).attr("fill-opacity", 0);
+        if (fftRaf) {
+            fftDraining = true; // let EMA decay naturally to silence, then stop
+        } else {
+            fftPath.attr("d", null).attr("fill-opacity", 0);
+        }
     }
 
     // Filters
