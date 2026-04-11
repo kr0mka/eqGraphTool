@@ -272,9 +272,15 @@ doc.html(`
                 <button class="autoeq">AutoEQ</button>
                 <button class="readme">Readme</button>
               </div>
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:0">
-                <h4 style="margin:0">EQ Demo</h4>
-                <button id="eq-bypass-btn" style="font-size:11px;padding:1px 7px;opacity:0.7">Bypass</button>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <h4 style="margin:0">EQ Demo</h4>
+                  <button id="eq-bypass-btn" style="font-size:11px;padding:1px 7px;opacity:0.7">Bypass</button>
+                </div>
+                <div class="fft-offset-control">
+                  <span>Spectrum</span>
+                  <input id="fft-offset-slider" type="range" min="-10" max="10" step="0.5" value="0">
+                </div>
               </div>
               <div class="eq-demo">
                 <select class="eq-track">
@@ -5064,7 +5070,7 @@ function updatePreampDisplay() {
             }
             const avgPow = sum / count;
             const db = avgPow > 1e-20 ? 10 * Math.log10(avgPow) : -120;
-            const rawY = y(yDom[1] + db + 25); // 0 dBFS = top+25dB offset, scale matches grid
+            const rawY = y(yDom[1] + db + 25 + fftOffsetDb); // 0 dBFS = top+25dB offset, scale matches grid
             pts.push([x(freq), Math.max(0, Math.min(yBottom, rawY))]);
         }
 
@@ -5103,6 +5109,15 @@ function updatePreampDisplay() {
     let activeFilterNodes = []; // persistent BiquadFilterNode cache
     let activeFilterSource = null; // source the current chain is built for
     let eqBypassed = false;
+    let fftOffsetDb = 0;
+    const fftOffsetSlider = document.getElementById("fft-offset-slider");
+    fftOffsetSlider.addEventListener("input", function() {
+        fftOffsetDb = parseFloat(this.value);
+    });
+    fftOffsetSlider.addEventListener("dblclick", function() {
+        this.value = 0;
+        fftOffsetDb = 0;
+    });
 
     function filterTypeString(type) {
         if (type == "PK") return "peaking";

@@ -673,6 +673,23 @@ div.extra-eq > div.eq-demo > input[name="tone-generator-freq"] {
   width: 65% !important;
 }
 
+.fft-offset-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.fft-offset-control input[type="range"] {
+  width: 70px;
+  border: 1px solid var(--background-color-contrast-more);
+  border-radius: 1em;
+  accent-color: var(--accent-color-contrast);
+  background-color: var(--background-color-graph) !important;
+}
+
 div.settings-row > input[name="balance-vol"] {
   width: 100% !important;
   margin:auto;
@@ -700,7 +717,7 @@ div.extra-panel div.filters-button > button[class="pink-noise selected"] {
 
 .volume-slider {
   position: absolute;
-  bottom: 100%;
+  top: calc(100% - 6px);
   left: 50%;
   transform: translateX(-50%);
   display: none;
