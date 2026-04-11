@@ -1125,3 +1125,35 @@ button.interactive-eq-help {
 .freq-slider-popup .custom-slider-thumb:active {
   cursor: grabbing;
 }
+
+/* Rename button on dynamic phone entries */
+span.rename-btn {
+  position: static !important; /* override .phonename span { position: absolute } */
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 12px;
+  opacity: 0.4;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1;
+  user-select: none;
+  background: transparent !important;
+  height: auto !important;
+  white-space: normal !important;
+  z-index: auto !important;
+}
+span.rename-btn:hover {
+  opacity: 0.9;
+  color: inherit !important;
+}
+input.rename-input {
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  font: inherit;
+  font-size: inherit;
+  outline: none;
+  padding: 0;
+}

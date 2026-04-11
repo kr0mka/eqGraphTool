@@ -1478,7 +1478,42 @@ function updatePhoneTable() {
     td().attr("class","item-line item-target")
         .call(s=>s.filter(p=>!p.isTarget).attr("class","item-line item-phone")
                   .append("span").attr("class","brand").text(p=>p.dispBrand))
-        .call(addModel);
+        .call(addModel)
+        .call(s=>s.filter(p=>p.isDynamic && !p.isLiveEQ && !p.isTarget)
+            .select(".phonename").append("span")
+            .attr("class","rename-btn")
+            .attr("title","Rename")
+            .html("✎")
+            .on("click", function(p) {
+                let btn = this;
+                let pn = this.parentElement; // .phonename node
+                let prev = p.dispName;
+                // hide btn, strip text/html before it, insert input before btn
+                btn.style.display = "none";
+                while (pn.firstChild && pn.firstChild !== btn) pn.removeChild(pn.firstChild);
+                let inp = document.createElement("input");
+                inp.type = "text"; inp.value = prev; inp.className = "rename-input";
+                pn.insertBefore(inp, btn);
+                inp.select();
+                function commit() {
+                    let val = inp.value.trim() || prev;
+                    p.dispName = val;
+                    p.fullName = p.dispBrand + " " + val;
+                    if (pn.contains(inp)) pn.removeChild(inp);
+                    pn.insertBefore(document.createTextNode(val), btn);
+                    btn.style.display = "";
+                    doc.select("#phones").selectAll("div.phone-item")
+                        .filter(q => q === p)
+                        .attr("name", p.fullName)
+                        .select("span").text(p.fullName);
+                }
+                inp.addEventListener("keydown", e => {
+                    if (e.key === "Enter") inp.blur();
+                    if (e.key === "Escape") { inp.value = prev; inp.blur(); }
+                });
+                inp.addEventListener("blur", commit);
+                inp.focus();
+            }));
     td().attr("class","curve-color").append("button")
         .style("background-color",p=>getCurveColor(p.id,0,p.hexColor))
         .call(makeColorPicker); // .filter(p=>!p.isTarget) if you want to exclude target from color picker
@@ -2449,7 +2484,7 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
     }
     window.updatePhoneSelect = () => {
         doc.select("#phones").selectAll("div.phone-item")
-            .data(allPhones)
+            .data(allPhones.filter(p => !p.isLiveEQ))
             .join((enter) => {
                 let phoneDiv = enter.append("div")
                     .attr("class","phone-item")
@@ -3693,10 +3728,11 @@ function addExtra() {
         fileAudio.click();
     });
 
-    let addOrUpdatePhone = (brand, phone, ch) => {
+    let addOrUpdatePhone = (brand, phone, ch, isLiveEQ) => {
         let phoneObj = asPhoneObj(brand, phone);
         phoneObj.rawChannels = ch;
         phoneObj.isDynamic = true;
+        if (isLiveEQ) phoneObj.isLiveEQ = true; // set before updatePhoneSelect runs
         let phoneObjs = brand.phoneObjs;
         let oldPhoneObj = phoneObjs.filter(p => p.phone == phone.name)[0]
         if (oldPhoneObj) {
@@ -3869,7 +3905,7 @@ function addExtra() {
         let existingEQOffset = phoneObj.eq ? phoneObj.eq.offset : null;
         let phoneEQ = { name: phoneObj.dispName + " EQ" };
         let phoneObjEQ = addOrUpdatePhone(phoneObj.brand, phoneEQ,
-            phoneObj.rawChannels.map(c => c ? Equalizer.apply(c, filters) : null));
+            phoneObj.rawChannels.map(c => c ? Equalizer.apply(c, filters) : null), true);
         phoneObj.eq = phoneObjEQ;
         phoneObjEQ.eqParent = phoneObj;
         // Set offset: use existing EQ offset if available, otherwise inherit from parent
