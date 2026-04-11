@@ -233,11 +233,13 @@ doc.html(`
                   <b>Controls:</b><br>
                   • Click graph to add filter<br>
                   • Drag handle to adjust freq/gain<br>
-                  • Scroll on handle to adjust Q<br>
+                  • Hold Ctrl while dragging to lock axis<br>
+                  • Shift + scroll on handle to adjust Q<br>
                   • Click handle to show whiskers<br>
                   • Drag whiskers to adjust Q<br>
                   • Double-click to cycle type<br>
-                  • Click ✕ to delete filter
+                  • Click ✕ to delete filter<br>
+                  • <b>EQ Demo:</b> filters affect audio live
                 </div>
                 <div class="tooltip-content mobile-controls">
                   <b>Controls:</b><br>
@@ -246,7 +248,8 @@ doc.html(`
                   • Long press to show whiskers<br>
                   • Drag whiskers to adjust Q<br>
                   • Double-tap to cycle type<br>
-                  • Tap ✕ to delete filter
+                  • Tap ✕ to delete filter<br>
+                  • <b>EQ Demo:</b> filters affect audio live
                 </div>
               </div>
               <h4 style="margin: 6px 0 3px 0" >AutoEQ</h4>
@@ -269,7 +272,10 @@ doc.html(`
                 <button class="autoeq">AutoEQ</button>
                 <button class="readme">Readme</button>
               </div>
-              <h4 style="margin:0">EQ Demo</h4>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:0">
+                <h4 style="margin:0">EQ Demo</h4>
+                <button id="eq-bypass-btn" style="font-size:11px;padding:1px 7px;opacity:0.7">Bypass</button>
+              </div>
               <div class="eq-demo">
                 <select class="eq-track">
                     <option value="pink" selected>Pink Noise</option>
@@ -284,8 +290,8 @@ doc.html(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M6 7l8-5v20l-8-5v-10zm-6 10h4v-10h-4v10zm20.264-13.264l-1.497 1.497c1.847 1.783 2.983 4.157 2.983 6.767 0 2.61-1.135 4.984-2.983 6.766l1.498 1.498c2.305-2.153 3.735-5.055 3.735-8.264s-1.43-6.11-3.736-8.264zm-.489 8.264c0-2.084-.915-3.967-2.384-5.391l-1.503 1.503c1.011 1.049 1.637 2.401 1.637 3.888 0 1.488-.623 2.841-1.634 3.891l1.503 1.503c1.468-1.424 2.381-3.309 2.381-5.394z"/></svg>
                   </div>
                   <div class="volume-slider">
-                    <input type="range" min="-60" max="0" step="0.5" value="-18" id="volumeRange">
-                    <span id="volumeDb">-18 dB</span>
+                    <input type="range" min="-60" max="0" step="0.5" value="0" id="volumeRange">
+                    <span id="volumeDb">0 dB</span>
                   </div>
                 </div>
                 <div id="play-button" style="fill: var(--accent-color-contrast) !important;">
@@ -4661,6 +4667,15 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
         });
     })();
 
+    // EQ Bypass
+    document.getElementById("eq-bypass-btn").addEventListener("click", function() {
+        eqBypassed = !eqBypassed;
+        this.style.opacity = eqBypassed ? "1" : "0.7";
+        this.style.fontWeight = eqBypassed ? "bold" : "";
+        this.textContent = eqBypassed ? "Bypassed" : "Bypass";
+        updateFilters(eqBypassed ? [] : elemToFilters());
+    });
+
     // Readme
     document.querySelector("div.extra-eq button.readme").addEventListener("click", () => {
         alert("1. If you want to AutoEQ model A to B, display A B and remove targets.\n" +
@@ -4789,9 +4804,9 @@ function updatePreampDisplay() {
     const volumeIcon = document.querySelector('.volume-icon');
     const volumeRange = document.getElementById('volumeRange');
     const volumeDb = document.getElementById('volumeDb');
-    let currentVolume = -18; // dB
+    let currentVolume = 0; // dB
     let volumeNode = audioContext.createGain();
-    volumeNode.gain.value = Math.pow(10, -18 / 20);
+    volumeNode.gain.value = Math.pow(10, 0 / 20);
 
     function dbToGain(db) { return Math.pow(10, db / 20); }
     function updateVolumeDisplay(db) {
@@ -4869,6 +4884,11 @@ function updatePreampDisplay() {
         channelBalanceSlider.value = balValue;
     });
 
+    // preamp compensation node: sits between filter chain and channelSplitter
+    let preampNode = audioContext.createGain();
+    preampNode.gain.value = 1.0;
+    preampNode.connect(channelSplitter);
+
     // connect the splitter and merger
     channelSplitter.connect(leftChannel, 0);
     channelSplitter.connect(rightChannel, 1);
@@ -4879,9 +4899,149 @@ function updatePreampDisplay() {
     channelMerger.connect(volumeNode);
     volumeNode.connect(audioContext.destination);
 
+    // FFT spectrum overlay — BH7 window, custom FFT, log-interpolated display
+    const fftAnalyser = audioContext.createAnalyser();
+    fftAnalyser.fftSize = 16384;
+    fftAnalyser.smoothingTimeConstant = 0;
+    const FFT_SIZE = fftAnalyser.fftSize;
+    const fftBinCount = fftAnalyser.frequencyBinCount;
+    const fftTimeDomain = new Float32Array(FFT_SIZE);
+    const fftRe = new Float32Array(FFT_SIZE);
+    const fftIm = new Float32Array(FFT_SIZE);
+    const fftSmoothedPow = new Float32Array(fftBinCount); // smoothed linear power per bin
+    volumeNode.connect(fftAnalyser);
+
+    // Pre-compute Blackman-Harris 7-term window
+    const BH7_COEFFS = [0.27105140069342, 0.43329793923448, 0.21812299954311,
+                        0.06592544638803, 0.01081174209837, 0.00077658482522, 0.00001388721735];
+    const bh7Win = new Float32Array(FFT_SIZE);
+    let bh7WinSum = 0;
+    for (let n = 0; n < FFT_SIZE; n++) {
+        let w = BH7_COEFFS[0];
+        for (let k = 1; k < BH7_COEFFS.length; k++)
+            w += (k & 1 ? -1 : 1) * BH7_COEFFS[k] * Math.cos(2 * Math.PI * k * n / FFT_SIZE);
+        bh7Win[n] = w;
+        bh7WinSum += w;
+    }
+
+    // Iterative radix-2 Cooley-Tukey FFT (in-place)
+    function computeFFT(re, im) {
+        const n = re.length;
+        let j = 0;
+        for (let i = 1; i < n; i++) {
+            let bit = n >> 1;
+            for (; j & bit; bit >>= 1) j ^= bit;
+            j ^= bit;
+            if (i < j) {
+                let t = re[i]; re[i] = re[j]; re[j] = t;
+                t = im[i]; im[i] = im[j]; im[j] = t;
+            }
+        }
+        for (let len = 2; len <= n; len <<= 1) {
+            const half = len >> 1;
+            const wr = Math.cos(-Math.PI / half), wi = Math.sin(-Math.PI / half);
+            for (let i = 0; i < n; i += len) {
+                let cr = 1, ci = 0;
+                for (let k = 0; k < half; k++) {
+                    const ur = re[i+k], ui = im[i+k];
+                    const vr = re[i+k+half]*cr - im[i+k+half]*ci;
+                    const vi = re[i+k+half]*ci + im[i+k+half]*cr;
+                    re[i+k] = ur+vr; im[i+k] = ui+vi;
+                    re[i+k+half] = ur-vr; im[i+k+half] = ui-vi;
+                    const nr = cr*wr - ci*wi; ci = cr*wi + ci*wr; cr = nr;
+                }
+            }
+        }
+    }
+
+    const fftPath = gr.append("path")
+        .attr("class", "fft-spectrum")
+        .attr("fill", "var(--accent-color-contrast, #fff)")
+        .attr("fill-opacity", 0)
+        .style("pointer-events", "none");
+    fftPath.lower();
+
+    let fftRaf = null;
+    let fftLastTime = null;
+
+    function drawFFTSpectrum(timestamp) {
+        // Frame-rate independent symmetric smoothing on linear power (τ=80ms)
+        // Smoothing power (not dB) gives correct statistical averaging — avoids
+        // the fast-attack sawtooth oscillation that asymmetric dB smoothing causes
+        const dt = fftLastTime !== null ? Math.min(timestamp - fftLastTime, 100) : 16.67;
+        fftLastTime = timestamp;
+        const keep = Math.exp(-dt / 80);
+        const alphaNew = 1 - keep;
+
+        // Apply BH7 window to time-domain samples
+        fftAnalyser.getFloatTimeDomainData(fftTimeDomain);
+        for (let i = 0; i < FFT_SIZE; i++) { fftRe[i] = fftTimeDomain[i] * bh7Win[i]; fftIm[i] = 0; }
+        computeFFT(fftRe, fftIm);
+
+        // Accumulate smoothed linear power per bin
+        const winSumSq = bh7WinSum * bh7WinSum;
+        for (let k = 0; k < fftBinCount; k++) {
+            const pow = 4 * (fftRe[k]*fftRe[k] + fftIm[k]*fftIm[k]) / winSumSq;
+            fftSmoothedPow[k] = keep * fftSmoothedPow[k] + alphaNew * pow;
+        }
+
+        // Build path: log-spaced display points, linearly interpolated between bins
+        // Y: 0 dBFS anchored to yDom[1] (top), same dB/px as graph grid
+        const nyquist = audioContext.sampleRate / 2;
+        const yDom = y.domain();
+        const xDom = x.domain();
+        const yBottom = y(yDom[0]);
+        const logMin = Math.log10(Math.max(20, xDom[0]));
+        const logMax = Math.log10(Math.min(20000, xDom[1]));
+        const numPts = 300;
+
+        // Frequency-dependent octave smoothing window on linear power:
+        // 1/2 oct below 300Hz → 1/12 oct above 1kHz (log-interpolated)
+        const LOG_LO = Math.log2(300), LOG_HI = Math.log2(1000);
+        let pts = [];
+        for (let i = 0; i < numPts; i++) {
+            const freq = Math.pow(10, logMin + (i / (numPts - 1)) * (logMax - logMin));
+            const t = Math.max(0, Math.min(1, (Math.log2(freq) - LOG_LO) / (LOG_HI - LOG_LO)));
+            const octHalfExp = (1/4) * (1 - t) + (1/24) * t; // 1/2 oct → 1/12 oct half-width exponent
+            const octHalf = Math.pow(2, octHalfExp);
+            const freqLo = freq / octHalf;
+            const freqHi = freq * octHalf;
+            const bLo = Math.max(0, Math.floor(freqLo / nyquist * fftBinCount));
+            const bHi = Math.min(fftBinCount - 1, Math.ceil(freqHi / nyquist * fftBinCount));
+            let sum = 0, count = 0;
+            if (bHi > bLo) {
+                for (let b = bLo; b <= bHi; b++) { sum += fftSmoothedPow[b]; count++; }
+            } else {
+                // Sub-bin: interpolate between adjacent bins
+                const binF = freq / nyquist * fftBinCount;
+                const b0 = Math.max(0, Math.floor(binF));
+                const b1 = Math.min(fftBinCount - 1, b0 + 1);
+                const frac = binF - b0;
+                sum = fftSmoothedPow[b0] * (1 - frac) + fftSmoothedPow[b1] * frac;
+                count = 1;
+            }
+            const avgPow = sum / count;
+            const db = avgPow > 1e-20 ? 10 * Math.log10(avgPow) : -120;
+            pts.push([x(freq), y(yDom[1] + db + 25)]); // 0 dBFS = top+25dB offset, scale matches grid
+        }
+
+        let d = `M${pts[0][0]},${yBottom} L${pts[0][0]},${pts[0][1]}`;
+        for (let i = 1; i < pts.length; i++) d += ` L${pts[i][0]},${pts[i][1]}`;
+        d += ` L${pts[numPts-1][0]},${yBottom} Z`;
+        fftPath.attr("d", d).attr("fill-opacity", 0.1);
+        fftRaf = requestAnimationFrame(drawFFTSpectrum);
+    }
+
+    function startFFT() { if (!fftRaf) { fftLastTime = null; fftRaf = requestAnimationFrame(drawFFTSpectrum); } }
+    function stopFFT() {
+        if (fftRaf) { cancelAnimationFrame(fftRaf); fftRaf = null; }
+        fftPath.attr("d", null).attr("fill-opacity", 0);
+    }
+
     // Filters
     let activeFilterNodes = []; // persistent BiquadFilterNode cache
     let activeFilterSource = null; // source the current chain is built for
+    let eqBypassed = false;
 
     function filterTypeString(type) {
         if (type == "PK") return "peaking";
@@ -4891,6 +5051,8 @@ function updatePreampDisplay() {
     }
 
     function updateFilters(filters) {
+        updateDemoPreamp(); // always update preamp from real filters, even when bypassed
+        if (eqBypassed) filters = [];
         if (filters.length == 0) {
             filters = [{ type: "PK", freq: 20, q: 0, gain: 0 }];
         }
@@ -4940,8 +5102,23 @@ function updatePreampDisplay() {
             activeFilterNodes.push(filter);
         });
 
-        nodes[nodes.length - 1].connect(channelSplitter);
+        nodes[nodes.length - 1].connect(preampNode);
         activeFilterSource = inputNode;
+    }
+
+    function updateDemoPreamp() {
+        const filters = elemToFilters();
+        if (!filters.length) { preampNode.gain.value = 1.0; return; }
+        const sr = audioContext.sampleRate;
+        const coeffs = filters.map(f => {
+            if (f.type === 'LSQ') return Equalizer.lowshelf(f.freq, f.q, f.gain, sr);
+            if (f.type === 'HSQ') return Equalizer.highshelf(f.freq, f.q, f.gain, sr);
+            return Equalizer.peaking(f.freq, f.q, f.gain, sr);
+        });
+        const freqs = Array.from({length: 500}, (_, i) => 20 * Math.pow(1000, i / 499));
+        const gains = Equalizer.calc_gains(freqs, coeffs, sr);
+        const maxBoost = Math.max(0, ...gains);
+        preampNode.gain.value = Math.pow(10, -maxBoost / 20);
     }
 
     // load pink noise audio file
@@ -4955,6 +5132,7 @@ function updatePreampDisplay() {
 
         // apply filters
         applyFilters(audioContext, currentSource, elemToFilters());
+        updateDemoPreamp();
 
         // track swapping
         let pinkNoisePlayButton = document.getElementById("play-button");
@@ -5051,6 +5229,7 @@ function updatePreampDisplay() {
         currentAudio.addEventListener("ended", () => {
             pinkNoisePlayButton.classList.remove("playing");
             pinkNoisePlayButton.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path d=\"M3 22v-20l18 10-18 10z\"/></svg>";
+            stopFFT();
         });
 
         // play pink noise when button class="pink-noise" is clicked and stop when clicked again
@@ -5065,6 +5244,7 @@ function updatePreampDisplay() {
                 }
                 pinkNoisePlayButton.classList.remove("playing");
                 pinkNoisePlayButton.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path d=\"M3 22v-20l18 10-18 10z\"/></svg>";
+                stopFFT();
             } else {
                 audioContext.resume();
                 if (toneGenActive) {
@@ -5082,7 +5262,8 @@ function updatePreampDisplay() {
                     currentAudio.play();
                 }
                 pinkNoisePlayButton.classList.add("playing");
-                pinkNoisePlayButton.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path d=\"M11 22h-4v-20h4v20zm6-20h-4v20h4v-20z\"/></svg>"
+                pinkNoisePlayButton.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path d=\"M11 22h-4v-20h4v20zm6-20h-4v20h4v-20z\"/></svg>";
+                startFFT();
             }
         });
     });
