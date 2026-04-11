@@ -3928,7 +3928,7 @@ function addExtra() {
     window.updateEQPhoneSelect = () => {
         let oldValue = eqPhoneSelect.value;
         let eligiblePhones = activePhones.filter(p =>
-            !p.isPrefBounds && !p.isTarget && !p.dispName.match(/ EQ$/));
+            !p.isPrefBounds && !p.isTarget && !p.isSavedEQ && !p.dispName.match(/ EQ$/));
         let optionValues = eligiblePhones.map(p => p.brand.name + " " + p.dispName);
         Array.from(eqPhoneSelect.children).slice(1).forEach(c => eqPhoneSelect.removeChild(c));
         optionValues.forEach(value => {
@@ -4011,8 +4011,13 @@ function addExtra() {
 
         let phoneEQ = { name: phoneObj.phone + " EQ Saved " + savedCounter };
         let phoneObjEQ = addOrUpdatePhone(phoneObj.brand, phoneEQ, phoneObj.eq.rawChannels);
+        phoneObjEQ.isSavedEQ = true;
         showPhone(phoneObjEQ, false);
         savedCounter++;
+        // Move saved EQ entry to appear directly after original in picker
+        let origNode = doc.select("#phones").selectAll("div.phone-item").filter(q => q === phoneObj).node();
+        let eqNode   = doc.select("#phones").selectAll("div.phone-item").filter(q => q === phoneObjEQ).node();
+        if (origNode && eqNode) origNode.after(eqNode);
     });
     // Import filters
     document.querySelector("div.extra-eq button.import-filters").addEventListener("click", () => {
