@@ -522,6 +522,12 @@ let line = d3.line()
     .x(d=>x(d[0]))
     .y(d=>y(d[1]))
     .curve(d3.curveNatural);
+let eqDeltaArea = d3.area()
+    .defined(d => isFinite(d[1]) && isFinite(d[2]))
+    .x(d=>x(d[0]))
+    .y0(d=>y(d[1]))
+    .y1(d=>y(d[2]))
+    .curve(d3.curveNatural);
 
 // Range buttons
 let selectedRange = 3; // Full range
@@ -537,6 +543,7 @@ rangeSel.on("click", function (_,i) {
     let dur = Math.min(r,s)===0 && Math.max(r,s)===2 ? 1100 : 700;
     clearLabels();
     gpath.selectAll("path:not(.eq-preview)").transition().duration(dur).attr("d", drawLine);
+    updateEQDeltaAreas(dur);
     let e = edgeWs[s];
     fadeEdge.transition().duration(dur).attrs(i=>({x:i?W-e[i]:0, width:e[i]}));
     xAxisObj.transition().duration(dur).call(fmtX);
@@ -620,6 +627,7 @@ dB.updatey = function (dom) {
     let getTr = o => o ? "translate(0,"+(y(o)-y(0))+")" : null;
     //clearLabels();
     gpath.selectAll("path:not(.eq-preview)").call(redrawLine);
+    updateEQDeltaAreas();
 }
 
 // y-axis scaler button
@@ -1157,6 +1165,12 @@ let activePhones = [];
 let baseline0 = { p:null, l:null, fn:l=>l },
     baseline = baseline0;
 
+let gdelta = gr.insert("g",".dBScaler")
+    .attr("class","eq-delta-areas")
+    .attr("fill","#777")
+    .attr("stroke","none")
+    .attr("mask","url(#graphFade)")
+    .style("pointer-events","none");
 let gpath = gr.insert("g",".dBScaler")
     .attr("fill","none")
     .attr("stroke-width",2.1)
@@ -1332,6 +1346,7 @@ function setBaseline(b, no_transition) {
     baseline = b;
     updateYCenter();
     if (no_transition) {
+        updateEQDeltaAreas();
         if (window.updateEQHandles) window.updateEQHandles();
         return;
     }
@@ -1349,6 +1364,7 @@ function setBaseline(b, no_transition) {
         });
 
     // Animate EQ handles along with curves
+    updateEQDeltaAreas(500);
     if (window.transitionEQHandles) window.transitionEQHandles(500);
 
     table.selectAll("tr").select(".button")
@@ -1434,17 +1450,115 @@ function addPhonesToUrl() {
     targetWindow.document.title = title;
     targetWindow.document.querySelector("meta[name='description']").setAttribute("content",baseDescription + ", including " + namesCombined +".");
 }
+function isInteractiveEQBasePhone(p) {
+    return p && !p.isPrefBounds && !p.isTarget && !p.isSavedEQ &&
+        !(p.dispName || "").match(/ EQ$/);
+}
+
+function getSelectedInteractiveEQPhone(eligiblePhones) {
+    let eqPhoneSelect = document.querySelector("div.extra-eq select[name='phone']");
+    let phoneSelected = eqPhoneSelect && eqPhoneSelect.value;
+    return phoneSelected && eligiblePhones.filter(
+        p => p.brand.name + " " + p.dispName == phoneSelected)[0];
+}
+
+function isInteractiveEQClone(p) {
+    return p && p.eqParent && isInteractiveEQBasePhone(p.eqParent);
+}
+
+function isInteractiveEQContextPhone(p) {
+    return isInteractiveEQBasePhone(p) || (p && p.isSavedEQ && !p.isPrefBounds && !p.isTarget);
+}
+
+function isInteractiveEQFocusPhone(phone, selectedPhone) {
+    return selectedPhone && (phone === selectedPhone || phone === selectedPhone.eq);
+}
+
+function interactiveEQOpacity(phone, selectedPhone) {
+    if (!selectedPhone) return null;
+    if (isInteractiveEQFocusPhone(phone, selectedPhone)) return null;
+    if (isInteractiveEQClone(phone)) return 0;
+    if (isInteractiveEQContextPhone(phone)) return 0.3;
+    return null;
+}
+
+function interactiveEQStrokeWidth(phone, selectedPhone) {
+    return isInteractiveEQFocusPhone(phone, selectedPhone) ? 2.7 : null;
+}
+
+function curveWithVisibleOffset(curve) {
+    let offset = getOffset(curve.p);
+    return baseline.fn(curve.l).map(d => [d[0], d[1] + offset]);
+}
+
+function makeEQDeltaPoints(baseCurve, eqCurve) {
+    let baseData = curveWithVisibleOffset(baseCurve),
+        eqData = curveWithVisibleOffset(eqCurve),
+        n = Math.min(baseData.length, eqData.length),
+        points = [];
+    for (let i = 0; i < n; i++) {
+        points.push([baseData[i][0], baseData[i][1], eqData[i][1]]);
+    }
+    return points;
+}
+
+function getEQDeltaPairs(selectedPhone) {
+    if (!selectedPhone || !selectedPhone.eq || activePhones.indexOf(selectedPhone.eq) === -1 ||
+        selectedPhone.hide || selectedPhone.eq.hide ||
+        !selectedPhone.activeCurves || !selectedPhone.eq.activeCurves) {
+        return [];
+    }
+
+    let baseCurves = selectedPhone.activeCurves,
+        eqCurves = selectedPhone.eq.activeCurves,
+        n = Math.min(baseCurves.length, eqCurves.length);
+    return d3.range(n).map(i => ({
+        id: baseCurves[i].id + " EQ delta " + eqCurves[i].id,
+        points: makeEQDeltaPoints(baseCurves[i], eqCurves[i])
+    })).filter(d => d.points.length);
+}
+
+function updateEQDeltaAreas(duration) {
+    let interactiveEQOn = typeof InteractiveEQ !== 'undefined' && InteractiveEQ.isEnabled(),
+        interactiveEQPhones = interactiveEQOn ? activePhones.filter(isInteractiveEQBasePhone) : [],
+        selectedInteractiveEQPhone = interactiveEQOn ? getSelectedInteractiveEQPhone(interactiveEQPhones) : null,
+        areas = gdelta.selectAll("path.eq-delta-area")
+            .data(getEQDeltaPairs(selectedInteractiveEQPhone), d => d.id),
+        draw = s => s
+            .attr("d", d => eqDeltaArea(d.points))
+            .attr("fill-opacity", 0.22);
+
+    areas.exit().remove();
+    let joined = areas.enter().append("path")
+        .attr("class","eq-delta-area")
+        .attr("fill","#777")
+        .attr("stroke","none")
+        .attr("fill-opacity",0)
+        .style("pointer-events","none")
+        .merge(areas);
+
+    if (duration) {
+        joined.transition().duration(duration).call(draw);
+    } else {
+        joined.call(draw);
+    }
+}
+window.updateEQDeltaAreas = updateEQDeltaAreas;
+
 function updatePaths(trigger) {
     clearLabels();
     let c = d3.merge(activePhones.map(p => p.activeCurves)),
+        interactiveEQOn = typeof InteractiveEQ !== 'undefined' && InteractiveEQ.isEnabled(),
+        interactiveEQPhones = interactiveEQOn ? activePhones.filter(isInteractiveEQBasePhone) : [],
+        selectedInteractiveEQPhone = interactiveEQOn ? getSelectedInteractiveEQPhone(interactiveEQPhones) : null,
         p = gpath.selectAll("path:not(.eq-preview)").data(c, d=>d.id);
     let graphLines = p.join("path").attr("opacity", c => {
             if (c.p.hide) return 0;
-            // Make non-EQ parent curve semi-transparent when Interactive EQ is on
-            if (typeof InteractiveEQ !== 'undefined' && InteractiveEQ.isEnabled() && c.p.eq) return 0.3;
+            if (interactiveEQOn) return interactiveEQOpacity(c.p, selectedInteractiveEQPhone);
             return null;
         })
         .classed("sample", c=>c.p.samp);
+    updateEQDeltaAreas();
     graphLines.attr("stroke", getColor_AC).call(redrawLine);
     let t = graphLines.filter(c=>c.p.isTarget)
         .attr("class", "target")
@@ -1456,11 +1570,15 @@ function updatePaths(trigger) {
     let nodes = graphLines.nodes();
     for (let i = 0; i < nodes.length; i++) {
         let g = nodes[i].__data__;
+        let lineNode = d3.select(nodes[i]);
         if (g.p.lineWeight) {
-            d3.select(nodes[i]).style("stroke-width", g.p.lineWeight);
+            lineNode.style("stroke-width", g.p.lineWeight);
+        } else {
+            lineNode.style("stroke-width", interactiveEQOn ?
+                interactiveEQStrokeWidth(g.p, selectedInteractiveEQPhone) : null);
         }
         if (g.p.dashStyle) {
-            d3.select(nodes[i]).style("stroke-dasharray", g.p.dashStyle);
+            lineNode.style("stroke-dasharray", g.p.dashStyle);
         }
     }
     if (ifURL && !trigger) addPhonesToUrlDebounced();
@@ -1566,6 +1684,7 @@ function updatePhoneTable() {
         gpath.selectAll("path:not(.eq-preview)").filter(c=>c.p===p)
             .attr("opacity", h?null:0);
         p.hide = !h;
+        updateEQDeltaAreas();
         if (labelsShown) {
             clearLabels();
             drawLabels();
@@ -3153,6 +3272,7 @@ d3.json(typeof PHONE_BOOK !== "undefined" ? PHONE_BOOK
             gpath.selectAll("path:not(.eq-preview)").filter(c=>c.p===p)
                 .attr("opacity", h?null:0);
             p.hide = !h;
+            updateEQDeltaAreas();
             if (labelsShown) {
                 clearLabels();
                 drawLabels();
@@ -3959,7 +4079,10 @@ function addExtra() {
     };
     updateFilterElements();
     updatePreampDisplay();  // Add this line
-    eqPhoneSelect.addEventListener("input", applyEQ);
+    eqPhoneSelect.addEventListener("input", () => {
+        updatePaths();
+        applyEQ();
+    });
     // Add new filter
     document.querySelector("div.extra-eq button.add-filter").addEventListener("click", () => {
     eqBands = Math.min(eqBands + 1, extraEQBandsMax);

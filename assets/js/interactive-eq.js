@@ -173,7 +173,9 @@ const InteractiveEQ = (function() {
         });
 
         if (!eqPath.empty()) {
+            eqCurve.l = previewData;
             eqPath.attr("d", svg.line(transformedData));
+            if (window.updateEQDeltaAreas) window.updateEQDeltaAreas();
         }
     }
 
