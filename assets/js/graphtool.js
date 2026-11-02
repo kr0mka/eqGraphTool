@@ -4628,7 +4628,42 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
 
     // TotalMixFX OSC Integration
     (function() {
-        const BRIDGE_URL = 'http://127.0.0.1:8765';
+        const BRIDGE_URLS = ['http://127.0.0.1:8765', 'http://127.0.0.1:18765'];
+        let bridgeURL = null;
+
+        async function bridgeRequest(path, init, baseURL = bridgeURL) {
+            if (!baseURL) throw new Error('Connect to the TotalMix bridge first');
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3000);
+            try {
+                const res = await fetch(`${baseURL}${path}`, {...init, signal: controller.signal});
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || `Bridge returned HTTP ${res.status}`);
+                return data;
+            } finally {
+                clearTimeout(timeout);
+            }
+        }
+
+        async function connectBridge() {
+            bridgeURL = null;
+            for (const url of BRIDGE_URLS) {
+                try {
+                    const status = await bridgeRequest('/api/status', undefined, url);
+                    // The fallback port must identify itself; keep older bridges
+                    // on the original port compatible.
+                    const identified = status.service === 'totalmix-osc-bridge';
+                    const legacy = url === BRIDGE_URLS[0] && status.port === 8765;
+                    if (status.status !== 'ok' || (!identified && !legacy)) continue;
+                    bridgeURL = url;
+                    break;
+                } catch (error) {
+                    // Only discovery is retried. Never retry an EQ write.
+                }
+            }
+            if (!bridgeURL) throw new Error('TotalMix bridge is unavailable');
+            return bridgeRequest('/api/channels');
+        }
 
         const tmConnect = document.querySelector('.totalmix-connect');
         const tmSend = document.querySelector('.totalmix-send');
@@ -4752,8 +4787,7 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
         tmConnect.addEventListener('click', async () => {
             setStatus('Connecting...', '#ff0');
             try {
-                const res = await fetch(`${BRIDGE_URL}/api/channels`);
-                const data = await res.json();
+                const data = await connectBridge();
                 tmChannel.innerHTML = data.channels.map(ch =>
                     `<option value="${ch.index}">${ch.name}</option>`
                 ).join('');
@@ -4801,12 +4835,11 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
 
             setStatus('Sending...', '#ff0');
             try {
-                const res = await fetch(`${BRIDGE_URL}/api/channel/${channel}/eq`, {
+                await bridgeRequest(`/api/channel/${channel}/eq`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({filters: organizedFilters})
                 });
-                await res.json();
                 let statusMsg = `Sent: ${result.roomEQCount} REQ + ${result.peqCount} PEQ bands`;
                 if (result.modifications.length > 0) {
                     statusMsg += ` | Rounded: ${result.modifications.join('; ')}`;
@@ -4822,8 +4855,7 @@ document.querySelector("div.extra-eq button.export-filters-tmreq").addEventListe
             const channel = parseInt(tmChannel.value);
             setStatus('Reading...', '#ff0');
             try {
-                const res = await fetch(`${BRIDGE_URL}/api/channel/${channel}/eq`);
-                const data = await res.json();
+                const data = await bridgeRequest(`/api/channel/${channel}/eq`);
                 if (data.filters && data.filters.length) {
                     filtersToElem(data.filters);
                     applyEQ();
